@@ -27,10 +27,10 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] Manual test: pick a real PR from your own GitHub, confirm diff renders correctly
 
 ## Milestone 3 — Single-Shot Gemini Review (no streaming, no DB persistence yet)
-- [ ] Gemini service: send one file's diff, prompt for strict JSON array output
-- [ ] Defensive JSON parsing (strip fences, try/catch, log raw response on failure)
-- [ ] Wire a manual "Review this file" button → call → render comments inline on the diff (in-memory, not persisted)
-- [ ] Manual test: verify comments land on the correct line numbers
+- [x] Gemini service: send one file's diff, prompt for strict JSON array output
+- [x] Defensive JSON parsing (strip fences, try/catch, log raw response on failure)
+- [x] Wire a manual "Review this file" button → call → render comments inline on the diff (in-memory, not persisted)
+- [x] Manual test: verify comments land on the correct line numbers
 
 ## Milestone 4 — MongoDB Persistence
 - [ ] `Review` and `Comment` Mongoose schemas
