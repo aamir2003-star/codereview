@@ -3,11 +3,11 @@
 Checklist form, grouped by milestone (matches the PRD's build order). Check items off as you go — this file is meant to be edited, not just read.
 
 ## Milestone 0 — Project Setup
-- [ ] Init Next.js frontend + Express backend as separate folders (monorepo-style, no need for a formal monorepo tool — just two folders and a root README)
-- [ ] Set up MongoDB (local or Atlas free tier)
-- [ ] `.env.example` for both frontend and backend, `.env` gitignored
-- [ ] Basic Express server with health-check route (`GET /health`)
-- [ ] ESLint + Prettier config shared across both
+- [x] Init Next.js frontend + Express backend as separate folders (monorepo-style, no need for a formal monorepo tool — just two folders and a root README)
+- [x] Set up MongoDB (local or Atlas free tier)
+- [x] `.env.example` for both frontend and backend, `.env` gitignored
+- [x] Basic Express server with health-check route (`GET /health`)
+- [x] ESLint + Prettier config shared across both
 
 ## Milestone 1 — GitHub OAuth + JWT Auth
 - [ ] Register a GitHub OAuth App (get client ID/secret)
