@@ -20,13 +20,11 @@ export const io = new Server(server, {
 setIO(io);
 setupReviewSockets(io);
 
-const startServer = async () => {
-  await connectDB();
+// Start HTTP server immediately
+server.listen(config.port, () => {
+  console.log(`[Server] Running on http://localhost:${config.port}`);
+  console.log(`[Environment] ${config.nodeEnv}`);
+});
 
-  server.listen(config.port, () => {
-    console.log(`[Server] Running on http://localhost:${config.port}`);
-    console.log(`[Environment] ${config.nodeEnv}`);
-  });
-};
-
-startServer();
+// Connect to MongoDB asynchronously
+connectDB();
