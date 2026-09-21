@@ -7,6 +7,7 @@ import { Comment } from '../models/Comment';
 import { decrypt } from '../utils/crypto';
 import { githubService, GitHubApiError } from '../services/github.service';
 import { geminiService, GeminiApiError } from '../services/gemini.service';
+import { getIO } from '../sockets/socket.instance';
 
 async function getUserAccessToken(userId: string): Promise<string> {
   const user = await User.findById(userId);
@@ -30,7 +31,7 @@ async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number)
 export const reviewController = {
   /**
    * POST /review
-   * Trigger a full PR review — creates Review doc, runs Gemini per file, persists comments
+   * Trigger a full PR review — creates Review doc, streams Gemini comments via Socket.io
    */
   async triggerReview(req: AuthenticatedRequest, res: Response): Promise<void> {
     const { owner, repo, pullNumber, prUrl, prTitle } = req.body as {
@@ -51,7 +52,6 @@ export const reviewController = {
       return;
     }
 
-    // Create the Review doc immediately and return its ID — don't block on AI
     const review = await Review.create({
       prUrl: prUrl || `https://github.com/${owner}/${repo}/pull/${pullNumber}`,
       owner,
@@ -62,20 +62,22 @@ export const reviewController = {
       status: 'pending',
     });
 
-    // Return the reviewId immediately so the client can join the socket room
-    res.status(202).json({ reviewId: review._id.toString(), status: 'pending' });
+    const reviewId = review._id.toString();
+    const io = getIO();
 
-    // --- Run the review asynchronously (fire and forget) ---
+    // Return reviewId immediately so client joins socket room `review:{reviewId}`
+    res.status(202).json({ reviewId, status: 'pending' });
+
+    // Asynchronous streaming worker
     (async () => {
       try {
         const accessToken = await getUserAccessToken(req.user!.userId);
 
-        // Update status to streaming
         await Review.findByIdAndUpdate(review._id, { status: 'streaming' });
+        io?.to(`review:${reviewId}`).emit('review:status', { reviewId, status: 'streaming' });
 
-        // Fetch PR files
         const files = await githubService.getPullRequestFiles(accessToken, owner, repo, pullNumber);
-        const filesToReview = files.slice(0, 10); // v1 cap
+        const filesToReview = files.slice(0, 10); // v1 limit
 
         await Review.findByIdAndUpdate(review._id, { totalFiles: filesToReview.length });
 
@@ -86,13 +88,19 @@ export const reviewController = {
           if (!file.patch) {
             filesReviewed++;
             await Review.findByIdAndUpdate(review._id, { filesReviewed });
+            io?.to(`review:${reviewId}`).emit('review:progress', {
+              reviewId,
+              filesReviewed,
+              totalFiles: filesToReview.length,
+              currentFile: file.filename,
+            });
             return;
           }
 
           try {
             const comments = await geminiService.reviewFileDiff(file.filename, file.patch);
 
-            // Persist each comment to MongoDB
+            // Persist each comment to MongoDB BEFORE broadcasting
             const docs = await Comment.insertMany(
               comments.map((c) => ({
                 reviewId: review._id,
@@ -104,32 +112,59 @@ export const reviewController = {
             );
 
             totalComments += docs.length;
+
+            // Stream new comments to all reviewers in this room
+            for (const doc of docs) {
+              io?.to(`review:${reviewId}`).emit('comment:new', {
+                reviewId,
+                comment: doc.toObject(),
+              });
+            }
           } catch (err) {
             if (err instanceof GeminiApiError) {
-              console.error(`[Review] Gemini failed for ${file.filename}:`, err.message);
-            } else {
-              console.error(`[Review] Unexpected error for ${file.filename}:`, err);
+              console.error(`[Review] Gemini error on ${file.filename}:`, err.message);
             }
+            io?.to(`review:${reviewId}`).emit('file:error', {
+              reviewId,
+              filename: file.filename,
+              error: err instanceof Error ? err.message : 'Analysis failed',
+            });
           }
 
           filesReviewed++;
           await Review.findByIdAndUpdate(review._id, { filesReviewed, totalComments });
+
+          io?.to(`review:${reviewId}`).emit('review:progress', {
+            reviewId,
+            filesReviewed,
+            totalFiles: filesToReview.length,
+            currentFile: file.filename,
+            totalComments,
+          });
         });
 
         await runWithConcurrency(tasks, 3);
 
-        // Mark review complete
+        // Review completed
         await Review.findByIdAndUpdate(review._id, { status: 'done', totalComments });
+        io?.to(`review:${reviewId}`).emit('review:complete', {
+          reviewId,
+          totalComments,
+          filesReviewed,
+        });
       } catch (err) {
-        console.error('[Review] Fatal error:', err);
+        console.error('[Review] Processing failed:', err);
         await Review.findByIdAndUpdate(review._id, { status: 'error' });
+        io?.to(`review:${reviewId}`).emit('review:error', {
+          reviewId,
+          message: err instanceof Error ? err.message : 'Review process encountered a fatal error',
+        });
       }
     })();
   },
 
   /**
    * GET /review/:id
-   * Fetch a review and all its persisted comments
    */
   async getReview(req: AuthenticatedRequest, res: Response): Promise<void> {
     const reviewId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -159,7 +194,6 @@ export const reviewController = {
 
   /**
    * GET /review/pr/:owner/:repo/:pullNumber
-   * Check if a review already exists for this PR
    */
   async getReviewByPr(req: AuthenticatedRequest, res: Response): Promise<void> {
     const owner = Array.isArray(req.params.owner) ? req.params.owner[0] : req.params.owner;
@@ -224,6 +258,16 @@ export const reviewController = {
         : undefined;
 
       await comment.save();
+
+      // Broadcast live to room
+      const io = getIO();
+      io?.to(`review:${comment.reviewId.toString()}`).emit('comment:resolved', {
+        reviewId: comment.reviewId.toString(),
+        commentId: comment._id.toString(),
+        resolved: comment.resolved,
+        resolvedBy: req.user.username,
+      });
+
       res.status(200).json({ comment });
     } catch (err) {
       console.error('[ResolveComment Error]:', err);
@@ -264,6 +308,16 @@ export const reviewController = {
       }
 
       await comment.save();
+
+      // Broadcast live to room
+      const io = getIO();
+      io?.to(`review:${comment.reviewId.toString()}`).emit('comment:upvoted', {
+        reviewId: comment.reviewId.toString(),
+        commentId: comment._id.toString(),
+        upvotes: comment.upvotes.map((id) => id.toString()),
+        userId: req.user.userId,
+      });
+
       res.status(200).json({ comment, upvotes: comment.upvotes.length });
     } catch (err) {
       console.error('[UpvoteComment Error]:', err);

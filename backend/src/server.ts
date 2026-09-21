@@ -3,6 +3,8 @@ import { Server } from 'socket.io';
 import app from './app';
 import { config } from './config/env';
 import { connectDB } from './config/db';
+import { setIO } from './sockets/socket.instance';
+import { setupReviewSockets } from './sockets/review.socket';
 
 const server = http.createServer(app);
 
@@ -15,13 +17,8 @@ export const io = new Server(server, {
   },
 });
 
-io.on('connection', (socket) => {
-  console.log(`[Socket.io] Client connected: ${socket.id}`);
-
-  socket.on('disconnect', () => {
-    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
-  });
-});
+setIO(io);
+setupReviewSockets(io);
 
 const startServer = async () => {
   await connectDB();

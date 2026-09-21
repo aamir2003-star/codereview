@@ -40,27 +40,27 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] Manual test: trigger a review, refresh the page, confirm comments reload from DB
 
 ## Milestone 5 — Socket.io Streaming
-- [ ] Socket.io server attached to the Express HTTP server
-- [ ] Socket auth middleware (verify JWT on connection handshake)
-- [ ] `join:review` room logic
-- [ ] Backend: loop through PR files, call Gemini per file with limited concurrency, save + emit `comment:new` as each resolves
-- [ ] `review:complete` emitted when all files done
-- [ ] Frontend: connect socket on review view mount, join room, render comments as they arrive
-- [ ] Manual test: two browser tabs open on the same review — confirm both receive comments live
+- [x] Socket.io server attached to the Express HTTP server
+- [x] Socket auth middleware (verify JWT on connection handshake)
+- [x] `join:review` room logic
+- [x] Backend: loop through PR files, call Gemini per file with limited concurrency, save + emit `comment:new` as each resolves
+- [x] `review:complete` emitted when all files done
+- [x] Frontend: connect socket on review view mount, join room, render comments as they arrive
+- [x] Manual test: two browser tabs open on the same review — confirm both receive comments live
 
 ## Milestone 6 — Resolve / Upvote (Live Sync)
-- [ ] `PATCH /comments/:id/resolve`, `PATCH /comments/:id/upvote`
-- [ ] Emit `comment:resolved` / `comment:upvoted` to the room on change
-- [ ] Frontend: resolve toggle + upvote button, optimistic local update
-- [ ] Manual test: two tabs, resolve in one, confirm it updates instantly in the other
+- [x] `PATCH /comments/:id/resolve`, `PATCH /comments/:id/upvote`
+- [x] Emit `comment:resolved` / `comment:upvoted` to the room on change
+- [x] Frontend: resolve toggle + upvote button, optimistic local update
+- [x] Manual test: two tabs, resolve in one, confirm it updates instantly in the other
 
 ## Milestone 7 — Polish
-- [ ] Severity color-coding (badges + inline diff markers)
-- [ ] Empty states: no repos, zero-issue PR, failed-to-parse file
-- [ ] Review status bar ("Streaming… 3/7 files" → "Complete")
-- [ ] Presence indicator (who's viewing this review)
-- [ ] Rate limiting on `POST /review`
-- [ ] README with setup instructions, screenshots/GIF of the live streaming in action
+- [x] Severity color-coding (badges + inline diff markers)
+- [x] Empty states: no repos, zero-issue PR, failed-to-parse file
+- [x] Review status bar ("Streaming… 3/7 files" → "Complete")
+- [x] Presence indicator (who's viewing this review)
+- [x] Rate limiting on `POST /review`
+- [x] README with setup instructions, screenshots/GIF of the live streaming in action
 
 ## Stretch Goals (only after everything above is solid)
 - [ ] Post comments back to GitHub as real PR review comments

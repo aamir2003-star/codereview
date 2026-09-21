@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileDiff, PullRequest } from '@/lib/api';
 import { PersistedComment, PersistedReview } from '@/lib/review-api';
+import { useReviewSocket } from '@/hooks/useReviewSocket';
+import { PresenceIndicator } from '@/components/presence/PresenceIndicator';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,7 +20,6 @@ import {
   Bug,
   Lightbulb,
   Info,
-  AlertCircle,
   ThumbsUp,
   CheckCircle2,
 } from 'lucide-react';
@@ -31,11 +32,13 @@ interface DiffViewerProps {
   currentReview?: PersistedReview;
   reviewComments?: PersistedComment[];
   isReviewing?: boolean;
+  token: string | null;
   onClose: () => void;
   onStartReview: () => void;
   onResolve?: (commentId: string) => void;
   onUpvote?: (commentId: string) => void;
   userId?: string;
+  onCommentsUpdated?: (comments: PersistedComment[]) => void;
 }
 
 const SEVERITY_ICONS = {
@@ -68,7 +71,7 @@ function CommentCardInline({
 
   return (
     <div
-      className={`my-1.5 mx-3 rounded-xl p-3 border text-xs font-sans shadow-md transition-all duration-200 ${
+      className={`my-1.5 mx-3 rounded-xl p-3 border text-xs font-sans shadow-md transition-all duration-200 animate-in fade-in slide-in-from-left-2 ${
         comment.resolved
           ? 'bg-neutral-900/40 border-neutral-800 text-neutral-400 opacity-75'
           : comment.severity === 'security'
@@ -132,23 +135,59 @@ export function DiffViewer({
   pr,
   files,
   isLoading,
+  reviewId,
   currentReview,
-  reviewComments = [],
+  reviewComments: initialComments = [],
   isReviewing,
+  token,
   onClose,
   onStartReview,
   onResolve,
   onUpvote,
   userId,
+  onCommentsUpdated,
 }: DiffViewerProps) {
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [localComments, setLocalComments] = useState<PersistedComment[]>(initialComments);
+
+  useEffect(() => {
+    setLocalComments(initialComments);
+  }, [initialComments]);
+
+  // Socket.io Real-Time Streaming Hook
+  const { activeUsers, progress, isStreaming } = useReviewSocket({
+    reviewId: reviewId ?? null,
+    token,
+    onNewComment: (newComment) => {
+      setLocalComments((prev) => {
+        if (prev.some((c) => c._id === newComment._id)) return prev;
+        const updated = [...prev, newComment];
+        onCommentsUpdated?.(updated);
+        return updated;
+      });
+    },
+    onCommentResolved: ({ commentId, resolved }) => {
+      setLocalComments((prev) => {
+        const updated = prev.map((c) => (c._id === commentId ? { ...c, resolved } : c));
+        onCommentsUpdated?.(updated);
+        return updated;
+      });
+    },
+    onCommentUpvoted: ({ commentId, upvotes }) => {
+      setLocalComments((prev) => {
+        const updated = prev.map((c) => (c._id === commentId ? { ...c, upvotes } : c));
+        onCommentsUpdated?.(updated);
+        return updated;
+      });
+    },
+  });
 
   const selectedFile = files[selectedFileIndex] ?? null;
   const totalAdditions = files.reduce((acc, f) => acc + f.additions, 0);
   const totalDeletions = files.reduce((acc, f) => acc + f.deletions, 0);
 
   // Map comments for the currently selected file
-  const currentComments = reviewComments.filter(
+  const currentComments = localComments.filter(
     (c) => c.filePath === selectedFile?.filename
   );
 
@@ -204,10 +243,10 @@ export function DiffViewer({
                 <span>{files.length} files</span>
                 <span className="text-emerald-400">+{totalAdditions}</span>
                 <span className="text-rose-400">-{totalDeletions}</span>
-                {reviewComments.length > 0 && (
+                {localComments.length > 0 && (
                   <span className="text-amber-400 font-sans flex items-center gap-1">
                     <Sparkles className="h-3 w-3" />
-                    {reviewComments.length} AI issues
+                    {localComments.length} AI issues
                   </span>
                 )}
               </div>
@@ -215,17 +254,20 @@ export function DiffViewer({
           </div>
 
           <div className="flex items-center gap-3">
-            {isReviewing ? (
+            {/* Live Presence Avatars */}
+            <PresenceIndicator users={activeUsers} currentUserId={userId} />
+
+            {isStreaming || isReviewing ? (
               <div className="flex items-center gap-2 rounded-xl bg-neutral-800/80 px-3 py-1.5 text-xs text-emerald-400 font-mono">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>
-                  Analyzing… {currentReview ? `(${currentReview.filesReviewed}/${currentReview.totalFiles || files.length} files)` : ''}
+                  Streaming… {progress ? `(${progress.filesReviewed}/${progress.totalFiles || files.length} files)` : ''}
                 </span>
               </div>
-            ) : currentReview ? (
+            ) : currentReview || localComments.length > 0 ? (
               <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium">
                 <Check className="h-4 w-4" />
-                Review saved ({reviewComments.length} issues)
+                Review complete ({localComments.length} issues)
               </div>
             ) : (
               <Button
@@ -234,7 +276,7 @@ export function DiffViewer({
                 className="gap-2 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-semibold text-xs"
               >
                 <Sparkles className="h-4 w-4" />
-                Start AI Review
+                Start Live AI Review
               </Button>
             )}
             <Button
@@ -266,7 +308,7 @@ export function DiffViewer({
             ) : (
               files.map((file, idx) => {
                 const isSelected = selectedFileIndex === idx;
-                const fileComments = reviewComments.filter((c) => c.filePath === file.filename);
+                const fileComments = localComments.filter((c) => c.filePath === file.filename);
                 const hasIssues = fileComments.length > 0;
 
                 return (
@@ -285,7 +327,7 @@ export function DiffViewer({
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {hasIssues && (
-                        <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/20">
+                        <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/20 animate-pulse">
                           {fileComments.length}
                         </span>
                       )}
@@ -345,7 +387,7 @@ export function DiffViewer({
                                 {line.content}
                               </span>
                             </div>
-                            {/* Inline AI comments with resolve and upvote */}
+                            {/* Inline AI comments with live Socket sync */}
                             {inlineComments.map((comment) => (
                               <CommentCardInline
                                 key={comment._id}

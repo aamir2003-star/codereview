@@ -255,6 +255,7 @@ export default function DashboardPage() {
           currentReview={currentReview}
           reviewComments={reviewComments}
           isReviewing={isReviewing}
+          token={token}
           onClose={() => {
             setInspectingPr(null);
             setCurrentReview(undefined);
@@ -265,6 +266,7 @@ export default function DashboardPage() {
           onResolve={handleResolve}
           onUpvote={handleUpvote}
           userId={user?._id}
+          onCommentsUpdated={setReviewComments}
         />
       )}
     </div>
