@@ -41,7 +41,8 @@ export const repoController = {
    * List open pull requests for a specific repository
    */
   async listPullRequests(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const { owner, repo } = req.params;
+    const owner = Array.isArray(req.params.owner) ? req.params.owner[0] : req.params.owner;
+    const repo = Array.isArray(req.params.repo) ? req.params.repo[0] : req.params.repo;
 
     if (!owner || !repo) {
       res.status(400).json({ error: 'Owner and repo parameters are required' });
@@ -72,7 +73,9 @@ export const repoController = {
    * Get file diffs for a specific pull request
    */
   async getPullRequestDiff(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const { owner, repo, number } = req.params;
+    const owner = Array.isArray(req.params.owner) ? req.params.owner[0] : req.params.owner;
+    const repo = Array.isArray(req.params.repo) ? req.params.repo[0] : req.params.repo;
+    const number = Array.isArray(req.params.number) ? req.params.number[0] : req.params.number;
     const pullNumber = parseInt(number || '', 10);
 
     if (!owner || !repo || isNaN(pullNumber)) {
