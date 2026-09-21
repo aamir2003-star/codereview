@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { config } from './config/env';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
+import repoRoutes from './routes/repo.routes';
 
 const app = express();
 
@@ -21,5 +22,6 @@ app.use(express.json());
 // Routes
 app.use('/', healthRoutes);
 app.use('/auth', authRoutes);
+app.use('/repos', repoRoutes);
 
 export default app;

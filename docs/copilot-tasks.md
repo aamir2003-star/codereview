@@ -19,12 +19,12 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] Manual test: full login round-trip works end to end
 
 ## Milestone 2 — Repo/PR Listing + Raw Diff (no AI yet)
-- [ ] `GET /repos` — list user's GitHub repos via stored token
-- [ ] `GET /repos/:owner/:repo/prs` — list open PRs
-- [ ] `GET /repos/:owner/:repo/prs/:number/diff` — fetch file diffs
-- [ ] Frontend: dashboard page listing repos → PRs
-- [ ] Frontend: diff viewer rendering a PR's files (static, no comments)
-- [ ] Manual test: pick a real PR from your own GitHub, confirm diff renders correctly
+- [x] `GET /repos` — list user's GitHub repos via stored token
+- [x] `GET /repos/:owner/:repo/prs` — list open PRs
+- [x] `GET /repos/:owner/:repo/prs/:number/diff` — fetch file diffs
+- [x] Frontend: dashboard page listing repos → PRs
+- [x] Frontend: diff viewer rendering a PR's files (static, no comments)
+- [x] Manual test: pick a real PR from your own GitHub, confirm diff renders correctly
 
 ## Milestone 3 — Single-Shot Gemini Review (no streaming, no DB persistence yet)
 - [ ] Gemini service: send one file's diff, prompt for strict JSON array output

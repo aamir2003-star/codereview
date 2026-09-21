@@ -17,6 +17,59 @@ export interface GitHubUserProfile {
   email?: string;
 }
 
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  owner: {
+    login: string;
+    avatar_url: string;
+  };
+  private: boolean;
+  html_url: string;
+  description: string | null;
+  updated_at: string;
+  language: string | null;
+  stargazers_count: number;
+  open_issues_count: number;
+  default_branch: string;
+}
+
+export interface GitHubPR {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  user: {
+    login: string;
+    avatar_url: string;
+  };
+  head: {
+    ref: string;
+    sha: string;
+  };
+  base: {
+    ref: string;
+  };
+  body: string | null;
+  draft: boolean;
+}
+
+export interface GitHubFileDiff {
+  sha: string;
+  filename: string;
+  status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  raw_url: string;
+  previous_filename?: string;
+}
+
 export const githubService = {
   getOAuthUrl(): string {
     const params = new URLSearchParams({
@@ -80,6 +133,106 @@ export const githubService = {
       }
 
       return (await response.json()) as GitHubUserProfile;
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async getUserRepos(accessToken: string): Promise<GitHubRepo[]> {
+    try {
+      const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'AI-Code-Review-Copilot',
+        },
+      });
+
+      if (!response.ok) {
+        throw new GitHubApiError(`Failed to fetch repos: ${response.statusText}`, response.status);
+      }
+
+      return (await response.json()) as GitHubRepo[];
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async getRepoPullRequests(accessToken: string, owner: string, repo: string): Promise<GitHubPR[]> {
+    try {
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=50`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'AI-Code-Review-Copilot',
+        },
+      });
+
+      if (!response.ok) {
+        throw new GitHubApiError(`Failed to fetch pull requests: ${response.statusText}`, response.status);
+      }
+
+      return (await response.json()) as GitHubPR[];
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async getPullRequestFiles(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    pullNumber: number
+  ): Promise<GitHubFileDiff[]> {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files?per_page=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new GitHubApiError(`Failed to fetch PR files: ${response.statusText}`, response.status);
+      }
+
+      return (await response.json()) as GitHubFileDiff[];
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async getPullRequestDiffRaw(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    pullNumber: number
+  ): Promise<string> {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3.diff',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new GitHubApiError(`Failed to fetch raw PR diff: ${response.statusText}`, response.status);
+      }
+
+      return await response.text();
     } catch (error) {
       if (error instanceof GitHubApiError) throw error;
       throw new GitHubApiError((error as Error).message);
