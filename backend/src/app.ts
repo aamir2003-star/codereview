@@ -7,6 +7,7 @@ import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import repoRoutes from './routes/repo.routes';
 import reviewRoutes from './routes/review.routes';
+import commentRoutes from './routes/comment.routes';
 
 const app = express();
 
@@ -25,5 +26,6 @@ app.use('/', healthRoutes);
 app.use('/auth', authRoutes);
 app.use('/repos', repoRoutes);
 app.use('/review', reviewRoutes);
+app.use('/comments', commentRoutes);
 
 export default app;

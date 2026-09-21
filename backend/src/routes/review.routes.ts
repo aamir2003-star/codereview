@@ -7,10 +7,13 @@ const router = Router();
 // All review routes require authentication
 router.use(requireAuth);
 
-// Single-file review (Milestone 3)
-router.post('/file', reviewController.reviewSingleFile);
+// Trigger a new review for a PR
+router.post('/', reviewController.triggerReview);
 
-// Full PR review (Milestone 3+)
-router.post('/pr', reviewController.reviewPullRequest);
+// Fetch a review + its comments by review ID
+router.get('/:id', reviewController.getReview);
+
+// Check if a review exists for a specific PR
+router.get('/pr/:owner/:repo/:pullNumber', reviewController.getReviewByPr);
 
 export default router;

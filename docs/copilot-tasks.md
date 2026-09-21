@@ -33,11 +33,11 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] Manual test: verify comments land on the correct line numbers
 
 ## Milestone 4 — MongoDB Persistence
-- [ ] `Review` and `Comment` Mongoose schemas
-- [ ] `POST /review` — create a Review doc, return `reviewId`
-- [ ] `GET /review/:id` — fetch a review + its comments
-- [ ] Wire the review-trigger flow to persist comments as they're generated
-- [ ] Manual test: trigger a review, refresh the page, confirm comments reload from DB
+- [x] `Review` and `Comment` Mongoose schemas
+- [x] `POST /review` — create a Review doc, return `reviewId`
+- [x] `GET /review/:id` — fetch a review + its comments
+- [x] Wire the review-trigger flow to persist comments as they're generated
+- [x] Manual test: trigger a review, refresh the page, confirm comments reload from DB
 
 ## Milestone 5 — Socket.io Streaming
 - [ ] Socket.io server attached to the Express HTTP server

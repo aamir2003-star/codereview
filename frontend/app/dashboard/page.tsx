@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Navbar } from '@/components/Navbar';
@@ -15,7 +15,15 @@ import {
   fetchPullRequests,
   fetchPullRequestDiff,
 } from '@/lib/api';
-import { FileReviewResult, reviewPullRequest } from '@/lib/review-api';
+import {
+  PersistedComment,
+  PersistedReview,
+  triggerReview,
+  fetchReview,
+  fetchReviewByPr,
+  resolveComment,
+  upvoteComment,
+} from '@/lib/review-api';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -29,14 +37,16 @@ export default function DashboardPage() {
   const [loadingPrs, setLoadingPrs] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Diff Viewer Modal State
+  // Diff Modal State
   const [inspectingPr, setInspectingPr] = useState<PullRequest | null>(null);
   const [diffFiles, setDiffFiles] = useState<FileDiff[]>([]);
   const [loadingDiff, setLoadingDiff] = useState<boolean>(false);
 
-  // Milestone 3: AI Review state
-  const [reviewResults, setReviewResults] = useState<FileReviewResult[] | undefined>(undefined);
+  // Persisted Review State
+  const [currentReview, setCurrentReview] = useState<PersistedReview | undefined>(undefined);
+  const [reviewComments, setReviewComments] = useState<PersistedComment[]>([]);
   const [isReviewing, setIsReviewing] = useState<boolean>(false);
+  const [reviewId, setReviewId] = useState<string | null>(null);
 
   // Route protection
   useEffect(() => {
@@ -45,85 +55,152 @@ export default function DashboardPage() {
     }
   }, [authLoading, user, token, router]);
 
-  // Load repositories on mount
+  // Load repositories
   useEffect(() => {
     if (!token) return;
-    let isMounted = true;
+    let mounted = true;
     setLoadingRepos(true);
-    setError(null);
-
     fetchRepos(token)
       .then((data) => {
-        if (!isMounted) return;
+        if (!mounted) return;
         setRepos(data);
         if (data.length > 0) setSelectedRepo(data[0]);
       })
-      .catch((err) => {
-        if (!isMounted) return;
-        setError(err.message || 'Failed to load repositories');
-      })
-      .finally(() => {
-        if (isMounted) setLoadingRepos(false);
-      });
-
-    return () => { isMounted = false; };
+      .catch((err) => { if (mounted) setError(err.message); })
+      .finally(() => { if (mounted) setLoadingRepos(false); });
+    return () => { mounted = false; };
   }, [token]);
 
   // Load pull requests when selectedRepo changes
   useEffect(() => {
     if (!token || !selectedRepo) return;
-    let isMounted = true;
+    let mounted = true;
     setLoadingPrs(true);
-
     fetchPullRequests(token, selectedRepo.owner.login, selectedRepo.name)
-      .then((prs) => { if (isMounted) setPullRequests(prs); })
-      .catch(() => { if (isMounted) setPullRequests([]); })
-      .finally(() => { if (isMounted) setLoadingPrs(false); });
-
-    return () => { isMounted = false; };
+      .then((prs) => { if (mounted) setPullRequests(prs); })
+      .catch(() => { if (mounted) setPullRequests([]); })
+      .finally(() => { if (mounted) setLoadingPrs(false); });
+    return () => { mounted = false; };
   }, [token, selectedRepo]);
 
-  // Inspect raw diff
+  // Poll review status while review is in progress
+  const pollReview = useCallback(
+    async (id: string) => {
+      if (!token) return;
+      try {
+        const { review, comments } = await fetchReview(token, id);
+        setCurrentReview(review);
+        setReviewComments(comments);
+
+        if (review.status === 'done' || review.status === 'error') {
+          setIsReviewing(false);
+        } else {
+          // Poll every 3 seconds until done
+          setTimeout(() => pollReview(id), 3000);
+        }
+      } catch (err) {
+        console.error('Poll review error:', err);
+        setIsReviewing(false);
+      }
+    },
+    [token]
+  );
+
+  // Open diff modal and check for existing review
   const handleInspectDiff = async (pr: PullRequest) => {
     if (!token || !selectedRepo) return;
     setInspectingPr(pr);
     setLoadingDiff(true);
-    setReviewResults(undefined);
+    setCurrentReview(undefined);
+    setReviewComments([]);
+    setReviewId(null);
 
-    try {
-      const response = await fetchPullRequestDiff(
-        token,
-        selectedRepo.owner.login,
-        selectedRepo.name,
-        pr.number
-      );
-      setDiffFiles(response.files);
-    } catch (err) {
-      console.error('Failed to load diff files:', err);
-      setDiffFiles([]);
-    } finally {
-      setLoadingDiff(false);
+    // Fetch diff files and check for existing review in parallel
+    const [diffResult] = await Promise.allSettled([
+      fetchPullRequestDiff(token, selectedRepo.owner.login, selectedRepo.name, pr.number),
+      fetchReviewByPr(token, selectedRepo.owner.login, selectedRepo.name, pr.number)
+        .then(({ review, comments }) => {
+          setCurrentReview(review);
+          setReviewComments(comments);
+          setReviewId(review._id);
+          // If it's still running, start polling
+          if (review.status === 'streaming' || review.status === 'pending') {
+            setIsReviewing(true);
+            pollReview(review._id);
+          }
+        })
+        .catch(() => { /* No existing review — that's fine */ }),
+    ]);
+
+    if (diffResult.status === 'fulfilled') {
+      setDiffFiles(diffResult.value.files);
     }
+    setLoadingDiff(false);
   };
 
-  // Milestone 3: Trigger AI review
+  // Trigger a new AI review
   const handleStartReview = async () => {
     if (!token || !selectedRepo || !inspectingPr) return;
     setIsReviewing(true);
-    setReviewResults(undefined);
+    setCurrentReview(undefined);
+    setReviewComments([]);
 
     try {
-      const result = await reviewPullRequest(
-        token,
-        selectedRepo.owner.login,
-        selectedRepo.name,
-        inspectingPr.number
-      );
-      setReviewResults(result.results);
+      const { reviewId: newId } = await triggerReview(token, {
+        owner: selectedRepo.owner.login,
+        repo: selectedRepo.name,
+        pullNumber: inspectingPr.number,
+        prUrl: inspectingPr.html_url,
+        prTitle: inspectingPr.title,
+      });
+      setReviewId(newId);
+      pollReview(newId);
     } catch (err) {
-      console.error('AI Review failed:', err);
-    } finally {
+      console.error('Start review error:', err);
       setIsReviewing(false);
+    }
+  };
+
+  // Optimistic resolve toggle
+  const handleResolve = async (commentId: string) => {
+    if (!token) return;
+    // Optimistic update
+    setReviewComments((prev) =>
+      prev.map((c) => (c._id === commentId ? { ...c, resolved: !c.resolved } : c))
+    );
+    try {
+      const { comment } = await resolveComment(token, commentId);
+      setReviewComments((prev) =>
+        prev.map((c) => (c._id === commentId ? comment : c))
+      );
+    } catch {
+      // Revert on failure
+      setReviewComments((prev) =>
+        prev.map((c) => (c._id === commentId ? { ...c, resolved: !c.resolved } : c))
+      );
+    }
+  };
+
+  // Optimistic upvote toggle
+  const handleUpvote = async (commentId: string) => {
+    if (!token || !user) return;
+    setReviewComments((prev) =>
+      prev.map((c) => {
+        if (c._id !== commentId) return c;
+        const hasUpvoted = c.upvotes.includes(user._id);
+        return {
+          ...c,
+          upvotes: hasUpvoted
+            ? c.upvotes.filter((id) => id !== user._id)
+            : [...c.upvotes, user._id],
+        };
+      })
+    );
+    try {
+      const { comment } = await upvoteComment(token, commentId);
+      setReviewComments((prev) => prev.map((c) => (c._id === commentId ? comment : c)));
+    } catch (err) {
+      console.error('Upvote error:', err);
     }
   };
 
@@ -145,7 +222,6 @@ export default function DashboardPage() {
             <p>{error}</p>
           </div>
         )}
-
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           <div className="md:col-span-5 lg:col-span-4">
             <RepoList
@@ -170,19 +246,25 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Diff + AI Review Modal */}
       {inspectingPr && (
         <DiffViewer
           pr={inspectingPr}
           files={diffFiles}
           isLoading={loadingDiff}
-          reviewResults={reviewResults}
+          reviewId={reviewId}
+          currentReview={currentReview}
+          reviewComments={reviewComments}
           isReviewing={isReviewing}
           onClose={() => {
             setInspectingPr(null);
-            setReviewResults(undefined);
+            setCurrentReview(undefined);
+            setReviewComments([]);
+            setReviewId(null);
           }}
           onStartReview={handleStartReview}
+          onResolve={handleResolve}
+          onUpvote={handleUpvote}
+          userId={user?._id}
         />
       )}
     </div>

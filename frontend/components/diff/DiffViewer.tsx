@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { FileDiff, PullRequest } from '@/lib/api';
-import { GeminiComment, FileReviewResult } from '@/lib/review-api';
+import { PersistedComment, PersistedReview } from '@/lib/review-api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -19,16 +19,23 @@ import {
   Lightbulb,
   Info,
   AlertCircle,
+  ThumbsUp,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface DiffViewerProps {
   pr: PullRequest;
   files: FileDiff[];
   isLoading: boolean;
-  reviewResults?: FileReviewResult[];
+  reviewId?: string | null;
+  currentReview?: PersistedReview;
+  reviewComments?: PersistedComment[];
   isReviewing?: boolean;
   onClose: () => void;
   onStartReview: () => void;
+  onResolve?: (commentId: string) => void;
+  onUpvote?: (commentId: string) => void;
+  userId?: string;
 }
 
 const SEVERITY_ICONS = {
@@ -45,37 +52,77 @@ const SEVERITY_LABEL = {
   nit: 'Nit',
 };
 
-function CommentInline({ comment }: { comment: GeminiComment }) {
+function CommentCardInline({
+  comment,
+  onResolve,
+  onUpvote,
+  currentUserId,
+}: {
+  comment: PersistedComment;
+  onResolve?: (commentId: string) => void;
+  onUpvote?: (commentId: string) => void;
+  currentUserId?: string;
+}) {
   const Icon = SEVERITY_ICONS[comment.severity];
-  const variantMap: Record<string, 'security' | 'bug' | 'smell' | 'nit'> = {
-    security: 'security',
-    bug: 'bug',
-    smell: 'smell',
-    nit: 'nit',
-  };
+  const hasUpvoted = currentUserId ? comment.upvotes.includes(currentUserId) : false;
 
   return (
     <div
-      className={`flex items-start gap-2.5 my-1 mx-3 rounded-xl px-3 py-2.5 border text-xs font-sans animate-in fade-in slide-in-from-left-2 duration-300 ${
-        comment.severity === 'security'
-          ? 'bg-rose-950/30 border-rose-500/30 text-rose-200'
+      className={`my-1.5 mx-3 rounded-xl p-3 border text-xs font-sans shadow-md transition-all duration-200 ${
+        comment.resolved
+          ? 'bg-neutral-900/40 border-neutral-800 text-neutral-400 opacity-75'
+          : comment.severity === 'security'
+          ? 'bg-rose-950/30 border-rose-500/40 text-rose-200'
           : comment.severity === 'bug'
-          ? 'bg-amber-950/30 border-amber-500/30 text-amber-200'
+          ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
           : comment.severity === 'smell'
-          ? 'bg-yellow-950/30 border-yellow-500/30 text-yellow-200'
-          : 'bg-sky-950/30 border-sky-500/30 text-sky-200'
+          ? 'bg-yellow-950/30 border-yellow-500/40 text-yellow-200'
+          : 'bg-sky-950/30 border-sky-500/40 text-sky-200'
       }`}
     >
-      <Icon className="h-4 w-4 shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <Badge variant={variantMap[comment.severity]}>{SEVERITY_LABEL[comment.severity]}</Badge>
-          <span className="text-[10px] font-mono opacity-60">Line {comment.line}</span>
-          <span className="text-[10px] opacity-40 flex items-center gap-1">
-            <Sparkles className="h-2.5 w-2.5" /> Gemini AI
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-2">
+          <Badge variant={comment.severity}>{SEVERITY_LABEL[comment.severity]}</Badge>
+          <span className="text-[11px] font-mono text-neutral-400">Line {comment.lineNumber}</span>
+          <span className="text-[10px] text-emerald-400/80 flex items-center gap-1">
+            <Sparkles className="h-3 w-3" /> Gemini AI
           </span>
         </div>
-        <p className="leading-relaxed">{comment.message}</p>
+        {comment.resolved && (
+          <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Resolved
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-start gap-2.5 mt-1">
+        <Icon className="h-4 w-4 shrink-0 mt-0.5" />
+        <p className="flex-1 leading-relaxed text-xs">{comment.message}</p>
+      </div>
+
+      <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px]">
+        <button
+          onClick={() => onUpvote?.(comment._id)}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+            hasUpvoted
+              ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30'
+              : 'text-neutral-400 hover:text-emerald-300 hover:bg-neutral-800/60'
+          }`}
+        >
+          <ThumbsUp className="h-3 w-3" />
+          <span>{comment.upvotes.length}</span>
+        </button>
+
+        <button
+          onClick={() => onResolve?.(comment._id)}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+            comment.resolved
+              ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+              : 'bg-neutral-800 hover:bg-emerald-600 hover:text-white text-neutral-200'
+          }`}
+        >
+          {comment.resolved ? 'Reopen Issue' : 'Mark as Resolved'}
+        </button>
       </div>
     </div>
   );
@@ -85,10 +132,14 @@ export function DiffViewer({
   pr,
   files,
   isLoading,
-  reviewResults,
+  currentReview,
+  reviewComments = [],
   isReviewing,
   onClose,
   onStartReview,
+  onResolve,
+  onUpvote,
+  userId,
 }: DiffViewerProps) {
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
 
@@ -97,23 +148,19 @@ export function DiffViewer({
   const totalDeletions = files.reduce((acc, f) => acc + f.deletions, 0);
 
   // Map comments for the currently selected file
-  const currentFileResult = reviewResults?.find(
-    (r) => r.filename === selectedFile?.filename
+  const currentComments = reviewComments.filter(
+    (c) => c.filePath === selectedFile?.filename
   );
-  const currentComments = currentFileResult?.comments ?? [];
 
   // Build a map from line number → comments
-  const commentsByLine = currentComments.reduce<Record<number, GeminiComment[]>>(
+  const commentsByLine = currentComments.reduce<Record<number, PersistedComment[]>>(
     (acc, c) => {
-      if (!acc[c.line]) acc[c.line] = [];
-      acc[c.line]!.push(c);
+      if (!acc[c.lineNumber]) acc[c.lineNumber] = [];
+      acc[c.lineNumber]!.push(c);
       return acc;
     },
     {}
   );
-
-  // Count total comments across all files
-  const totalReviewComments = reviewResults?.reduce((sum, r) => sum + r.comments.length, 0) ?? 0;
 
   // Parse patch string into annotated lines
   const parsePatch = (patch?: string) => {
@@ -123,7 +170,6 @@ export function DiffViewer({
       let type: 'add' | 'delete' | 'hunk' | 'normal' = 'normal';
       if (line.startsWith('@@')) {
         type = 'hunk';
-        // Extract the new-file start line from the hunk header
         const match = line.match(/@@ -\d+(?:,\d+)? \+(\d+)/);
         if (match?.[1]) lineNum = parseInt(match[1], 10) - 1;
       } else if (line.startsWith('+')) {
@@ -158,10 +204,10 @@ export function DiffViewer({
                 <span>{files.length} files</span>
                 <span className="text-emerald-400">+{totalAdditions}</span>
                 <span className="text-rose-400">-{totalDeletions}</span>
-                {totalReviewComments > 0 && (
+                {reviewComments.length > 0 && (
                   <span className="text-amber-400 font-sans flex items-center gap-1">
                     <Sparkles className="h-3 w-3" />
-                    {totalReviewComments} AI issues
+                    {reviewComments.length} AI issues
                   </span>
                 )}
               </div>
@@ -170,14 +216,16 @@ export function DiffViewer({
 
           <div className="flex items-center gap-3">
             {isReviewing ? (
-              <Button size="sm" disabled className="gap-2 bg-neutral-800 text-neutral-400 text-xs">
+              <div className="flex items-center gap-2 rounded-xl bg-neutral-800/80 px-3 py-1.5 text-xs text-emerald-400 font-mono">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Reviewing…
-              </Button>
-            ) : reviewResults ? (
+                <span>
+                  Analyzing… {currentReview ? `(${currentReview.filesReviewed}/${currentReview.totalFiles || files.length} files)` : ''}
+                </span>
+              </div>
+            ) : currentReview ? (
               <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium">
                 <Check className="h-4 w-4" />
-                Review complete
+                Review saved ({reviewComments.length} issues)
               </div>
             ) : (
               <Button
@@ -218,9 +266,8 @@ export function DiffViewer({
             ) : (
               files.map((file, idx) => {
                 const isSelected = selectedFileIndex === idx;
-                const fileResult = reviewResults?.find((r) => r.filename === file.filename);
-                const hasIssues = (fileResult?.comments?.length ?? 0) > 0;
-                const isError = fileResult?.status === 'error';
+                const fileComments = reviewComments.filter((c) => c.filePath === file.filename);
+                const hasIssues = fileComments.length > 0;
 
                 return (
                   <button
@@ -237,12 +284,9 @@ export function DiffViewer({
                       <span className="truncate text-xs font-mono">{file.filename}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {isError && (
-                        <AlertCircle className="h-3.5 w-3.5 text-rose-400" title="Review failed for this file" />
-                      )}
                       {hasIssues && (
                         <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/20">
-                          {fileResult!.comments.length}
+                          {fileComments.length}
                         </span>
                       )}
                       <span className="text-[10px] font-mono text-emerald-400">+{file.additions}</span>
@@ -267,11 +311,6 @@ export function DiffViewer({
                   <div className="flex items-center gap-3">
                     <span className="text-emerald-400">+{selectedFile.additions}</span>
                     <span className="text-rose-400">-{selectedFile.deletions}</span>
-                    {currentFileResult?.status === 'error' && (
-                      <span className="text-rose-300 font-sans text-[11px] flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> Couldn&apos;t review this file
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -306,9 +345,15 @@ export function DiffViewer({
                                 {line.content}
                               </span>
                             </div>
-                            {/* Inline AI comments after this line */}
-                            {inlineComments.map((comment, ci) => (
-                              <CommentInline key={`${line.lineNum}-${ci}`} comment={comment} />
+                            {/* Inline AI comments with resolve and upvote */}
+                            {inlineComments.map((comment) => (
+                              <CommentCardInline
+                                key={comment._id}
+                                comment={comment}
+                                onResolve={onResolve}
+                                onUpvote={onUpvote}
+                                currentUserId={userId}
+                              />
                             ))}
                           </React.Fragment>
                         );
