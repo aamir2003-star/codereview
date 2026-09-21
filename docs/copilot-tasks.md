@@ -10,13 +10,13 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] ESLint + Prettier config shared across both
 
 ## Milestone 1 — GitHub OAuth + JWT Auth
-- [ ] Register a GitHub OAuth App (get client ID/secret)
-- [ ] `GET /auth/github` → redirect to GitHub consent screen
-- [ ] `GET /auth/github/callback` → exchange code, upsert User, encrypt+store access token
-- [ ] Issue JWT, redirect to frontend with token
-- [ ] Auth middleware: verify JWT on protected routes
-- [ ] Frontend: login page, token storage, protected route wrapper
-- [ ] Manual test: full login round-trip works end to end
+- [x] Register a GitHub OAuth App (get client ID/secret)
+- [x] `GET /auth/github` → redirect to GitHub consent screen
+- [x] `GET /auth/github/callback` → exchange code, upsert User, encrypt+store access token
+- [x] Issue JWT, redirect to frontend with token
+- [x] Auth middleware: verify JWT on protected routes
+- [x] Frontend: login page, token storage, protected route wrapper
+- [x] Manual test: full login round-trip works end to end
 
 ## Milestone 2 — Repo/PR Listing + Raw Diff (no AI yet)
 - [ ] `GET /repos` — list user's GitHub repos via stored token
