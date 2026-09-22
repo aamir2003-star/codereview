@@ -71,11 +71,12 @@ export interface GitHubFileDiff {
 }
 
 export const githubService = {
-  getOAuthUrl(): string {
+  getOAuthUrl(state: string): string {
     const params = new URLSearchParams({
       client_id: config.github.clientId,
       scope: 'repo read:user user:email',
       redirect_uri: config.github.oauthRedirectUri,
+      state,
     });
     return `https://github.com/login/oauth/authorize?${params.toString()}`;
   },

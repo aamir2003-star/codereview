@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Navbar } from '@/components/Navbar';
@@ -47,6 +47,16 @@ export default function DashboardPage() {
   const [reviewComments, setReviewComments] = useState<PersistedComment[]>([]);
   const [isReviewing, setIsReviewing] = useState<boolean>(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPollingRef = useRef(false);
+
+  const stopPolling = useCallback(() => {
+    isPollingRef.current = false;
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = null;
+  }, []);
+
+  useEffect(() => stopPolling, [stopPolling]);
 
   // Route protection
   useEffect(() => {
@@ -86,29 +96,32 @@ export default function DashboardPage() {
   // Poll review status while review is in progress
   const pollReview = useCallback(
     async (id: string) => {
-      if (!token) return;
+      if (!token || !isPollingRef.current) return;
       try {
         const { review, comments } = await fetchReview(token, id);
+        if (!isPollingRef.current) return;
         setCurrentReview(review);
         setReviewComments(comments);
 
         if (review.status === 'done' || review.status === 'error') {
+          stopPolling();
           setIsReviewing(false);
         } else {
-          // Poll every 3 seconds until done
-          setTimeout(() => pollReview(id), 3000);
+          pollTimerRef.current = setTimeout(() => pollReview(id), 3000);
         }
       } catch (err) {
         console.error('Poll review error:', err);
+        stopPolling();
         setIsReviewing(false);
       }
     },
-    [token]
+    [token, stopPolling]
   );
 
   // Open diff modal and check for existing review
   const handleInspectDiff = async (pr: PullRequest) => {
     if (!token || !selectedRepo) return;
+    stopPolling();
     setInspectingPr(pr);
     setLoadingDiff(true);
     setCurrentReview(undefined);
@@ -125,6 +138,7 @@ export default function DashboardPage() {
           setReviewId(review._id);
           // If it's still running, start polling
           if (review.status === 'streaming' || review.status === 'pending') {
+            isPollingRef.current = true;
             setIsReviewing(true);
             pollReview(review._id);
           }
@@ -141,6 +155,8 @@ export default function DashboardPage() {
   // Trigger a new AI review
   const handleStartReview = async () => {
     if (!token || !selectedRepo || !inspectingPr) return;
+    stopPolling();
+    isPollingRef.current = true;
     setIsReviewing(true);
     setCurrentReview(undefined);
     setReviewComments([]);
@@ -257,6 +273,8 @@ export default function DashboardPage() {
           isReviewing={isReviewing}
           token={token}
           onClose={() => {
+            stopPolling();
+            setIsReviewing(false);
             setInspectingPr(null);
             setCurrentReview(undefined);
             setReviewComments([]);

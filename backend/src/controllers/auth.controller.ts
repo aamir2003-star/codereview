@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { githubService } from '../services/github.service';
 import { User } from '../models/User';
@@ -11,7 +12,15 @@ export const authController = {
    * Redirect user to GitHub OAuth login
    */
   redirectToGitHub(_req: Request, res: Response): void {
-    const authUrl = githubService.getOAuthUrl();
+    const state = crypto.randomBytes(32).toString('hex');
+    res.cookie('github_oauth_state', state, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.nodeEnv === 'production',
+      maxAge: 10 * 60 * 1000,
+      path: '/auth/github/callback',
+    });
+    const authUrl = githubService.getOAuthUrl(state);
     res.redirect(authUrl);
   },
 
@@ -19,11 +28,29 @@ export const authController = {
    * Handle GitHub OAuth callback
    */
   async handleCallback(req: Request, res: Response): Promise<void> {
-    const { code, error, error_description } = req.query;
+    const { code, error, error_description, state } = req.query;
 
     if (error) {
       console.error('[Auth Callback Error]:', error, error_description);
       res.redirect(`${config.clientUrl}/login?error=${encodeURIComponent(String(error_description || error))}`);
+      return;
+    }
+
+    const cookieState = req.headers.cookie
+      ?.split(';')
+      .map((cookie) => cookie.trim())
+      .find((cookie) => cookie.startsWith('github_oauth_state='))
+      ?.split('=')[1];
+    res.clearCookie('github_oauth_state', { path: '/auth/github/callback' });
+
+    if (
+      !state ||
+      typeof state !== 'string' ||
+      !cookieState ||
+      cookieState.length !== state.length ||
+      !crypto.timingSafeEqual(Buffer.from(cookieState), Buffer.from(state))
+    ) {
+      res.redirect(`${config.clientUrl}/login?error=${encodeURIComponent('Invalid OAuth state')}`);
       return;
     }
 

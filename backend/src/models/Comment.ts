@@ -38,4 +38,7 @@ const CommentSchema = new Schema<IComment>(
   { timestamps: true }
 );
 
+// Matches the review detail query and its file/line sort order.
+CommentSchema.index({ reviewId: 1, filePath: 1, lineNumber: 1 });
+
 export const Comment = mongoose.model<IComment>('Comment', CommentSchema);

@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { config } from '../config/env';
 
 export interface GeminiComment {
@@ -47,6 +46,9 @@ export const geminiService = {
       throw new GeminiApiError('GEMINI_API_KEY is not configured');
     }
 
+    // Load the SDK only when a review is requested. This keeps authentication
+    // and the HTTP server available even if the AI SDK takes time to initialise.
+    const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 
     const userPrompt = `File: ${filename}\n\nDiff patch:\n\`\`\`\n${patch}\n\`\`\``;

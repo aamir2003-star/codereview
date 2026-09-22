@@ -2,6 +2,8 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
 import { JwtPayload } from '../middleware/auth.middleware';
+import mongoose from 'mongoose';
+import { Review } from '../models/Review';
 
 export interface AuthenticatedSocket extends Socket {
   data: {
@@ -47,8 +49,17 @@ export function setupReviewSockets(io: Server): void {
     console.log(`[Socket.io] User connected: ${user?.username} (${socket.id})`);
 
     // Join a review room
-    socket.on('join:review', ({ reviewId }: { reviewId: string }) => {
-      if (!reviewId) return;
+    socket.on('join:review', async ({ reviewId }: { reviewId: string }) => {
+      if (!reviewId || !mongoose.isValidObjectId(reviewId) || !user) {
+        socket.emit('join:error', { error: 'Invalid review' });
+        return;
+      }
+
+      const review = await Review.findOne({ _id: reviewId, requestedBy: user.userId }).select('_id').lean();
+      if (!review) {
+        socket.emit('join:error', { error: 'Not authorized for this review' });
+        return;
+      }
 
       const roomName = `review:${reviewId}`;
       socket.join(roomName);
@@ -83,6 +94,7 @@ export function setupReviewSockets(io: Server): void {
       const roomUsers = roomPresence.get(reviewId);
       if (roomUsers) {
         roomUsers.delete(socket.id);
+        if (roomUsers.size === 0) roomPresence.delete(reviewId);
         const activeUsers = Array.from(
           new Map(Array.from(roomUsers.values()).map((u) => [u.userId, u])).values()
         );
@@ -100,6 +112,7 @@ export function setupReviewSockets(io: Server): void {
           const roomUsers = roomPresence.get(reviewId);
           if (roomUsers) {
             roomUsers.delete(socket.id);
+            if (roomUsers.size === 0) roomPresence.delete(reviewId);
             const activeUsers = Array.from(
               new Map(Array.from(roomUsers.values()).map((u) => [u.userId, u])).values()
             );
