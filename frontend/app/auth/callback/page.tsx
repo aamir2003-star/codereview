@@ -1,14 +1,17 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
+import { Preloader } from '@/components/Preloader';
 
 function CallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setAuthToken } = useAuth();
+  const [authenticated, setAuthenticated] = useState(false);
+  const finishLogin = useCallback(() => router.replace('/dashboard'), [router]);
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -21,12 +24,14 @@ function CallbackHandler() {
 
     if (token) {
       setAuthToken(token).then(() => {
-        router.push('/dashboard');
+        setAuthenticated(true);
       });
     } else {
       router.push('/login');
     }
   }, [searchParams, router, setAuthToken]);
+
+  if (authenticated) return <Preloader onComplete={finishLogin} />;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-neutral-950 text-neutral-100">

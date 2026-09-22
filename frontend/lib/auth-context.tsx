@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { disconnectSocket } from '@/lib/socket';
 
 export interface User {
   _id: string;
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(authToken);
         localStorage.setItem('auth_token', authToken);
       } else {
-        // Token is invalid/expired
+        // Token is invalid/expired — clear everything
         localStorage.removeItem('auth_token');
         setUser(null);
         setToken(null);
@@ -67,15 +68,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Regular login — goes through GitHub OAuth
   const login = () => {
     window.location.href = `${API_URL}/auth/github`;
   };
 
+  // Full logout:
+  // 1. Clears our JWT + socket
+  // 2. Redirects to /login with ?loggedOut=1 so the login page knows to show the fresh login state
   const logout = () => {
+    disconnectSocket();
     localStorage.removeItem('auth_token');
     setUser(null);
     setToken(null);
-    router.push('/login');
+    router.push('/login?loggedOut=1');
   };
 
   const setAuthToken = async (newToken: string) => {

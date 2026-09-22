@@ -4,7 +4,7 @@
   "description": "AI-Powered Code Review Copilot Backend",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/server.ts",
+    "dev": "tsx src/server.ts",
     "dev:watch": "tsx watch --clear-screen=false src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",

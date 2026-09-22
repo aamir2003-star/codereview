@@ -1,12 +1,10 @@
 import { Navbar } from '@/components/Navbar';
-import { Preloader } from '@/components/Preloader';
 import { HeroSection } from '@/components/HeroSection';
 import { FeatureScroll } from '@/components/FeatureScroll';
 
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-neutral-950 text-neutral-100">
-      <Preloader />
       <Navbar />
       <main className="flex-1">
         <HeroSection />

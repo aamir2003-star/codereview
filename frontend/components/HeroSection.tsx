@@ -1,287 +1,107 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
-  GitFork,
-  Sparkles,
   ArrowRight,
-  ShieldAlert,
-  Bug,
-  Lightbulb,
-  CheckCircle2,
-  ThumbsUp,
+  Bot,
+  Boxes,
+  Check,
+  CircleDot,
+  Code2,
+  GitFork,
   GitPullRequest,
-  Radio,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  X,
 } from 'lucide-react';
 
-const mockComments = [
-  {
-    id: 'c1',
-    line: 42,
-    severity: 'security' as const,
-    icon: ShieldAlert,
-    message: 'JWT secret is fallbacking to an unsecure hardcoded string in production mode.',
-    upvotes: 3,
-    resolved: false,
-    file: 'src/middleware/auth.ts',
-  },
-  {
-    id: 'c2',
-    line: 58,
-    severity: 'bug' as const,
-    icon: Bug,
-    message: 'Unchecked array index access could throw TypeError on empty diff payload.',
-    upvotes: 5,
-    resolved: true,
-    resolvedBy: 'aamir',
-    file: 'src/services/diff.ts',
-  },
-  {
-    id: 'c3',
-    line: 89,
-    severity: 'smell' as const,
-    icon: Lightbulb,
-    message: 'Consider memoizing this expensive AST traversal across render cycles.',
-    upvotes: 2,
-    resolved: false,
-    file: 'src/parser/hunk.ts',
-  },
+const stages = [
+  { id: 'pull', label: 'Pull request', detail: 'GitHub event', icon: GitPullRequest, tone: 'from-violet-500 to-fuchsia-500' },
+  { id: 'engine', label: 'Review engine', detail: 'Context-aware scan', icon: Bot, tone: 'from-cyan-400 to-blue-500' },
+  { id: 'team', label: 'Your team', detail: 'Live decisions', icon: Users, tone: 'from-emerald-400 to-teal-500' },
 ];
 
 export function HeroSection() {
   const { user, login } = useAuth();
-  const [activeTab, setActiveTab] = useState<'diff' | 'feed'>('diff');
-  const [comments, setComments] = useState(mockComments);
-  const [streamingProgress, setStreamingProgress] = useState(2);
+  const [selectedStage, setSelectedStage] = useState('engine');
+  const [rotation, setRotation] = useState({ x: -8, y: -10 });
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setStreamingProgress((p) => (p >= 3 ? 1 : p + 1));
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const toggleResolve = (id: string) => {
-    setComments((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, resolved: !c.resolved, resolvedBy: !c.resolved ? 'You' : undefined } : c
-      )
-    );
-  };
-
-  const handleUpvote = (id: string) => {
-    setComments((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, upvotes: c.upvotes + 1 } : c))
-    );
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setRotation({
+      x: ((event.clientY - rect.top) / rect.height - 0.5) * -14,
+      y: ((event.clientX - rect.left) / rect.width - 0.5) * 18,
+    });
   };
 
   return (
-    <section className="relative overflow-hidden pt-12 pb-20 md:pt-20 md:pb-32">
-      {/* Background Gradients */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[550px] w-[800px] -translate-x-1/2 rounded-full bg-gradient-to-tr from-emerald-500/15 via-teal-500/10 to-transparent blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-40 -z-10 h-[400px] w-[400px] rounded-full bg-cyan-500/10 blur-3xl" />
+    <section className="relative isolate overflow-hidden px-4 pb-24 pt-14 sm:px-6 lg:pb-32 lg:pt-24">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgba(139,92,246,.18),transparent_28%),radial-gradient(circle_at_82%_35%,rgba(45,212,191,.16),transparent_24%)]" />
+      <div className="pointer-events-none absolute left-1/2 top-20 -z-10 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full border border-white/[.04]" />
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col items-center text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-medium text-emerald-300 shadow-sm backdrop-blur-md mb-6">
-            <Radio className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
-            <span>Real-Time Collaborative Code Reviews</span>
-            <span className="text-emerald-500/50">•</span>
-            <span className="text-emerald-400 font-semibold">Gemini 2.0 Powered</span>
-          </div>
-
-          {/* Main Headline */}
-          <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight text-white sm:text-6xl md:text-7xl">
-            GitHub PR Reviews,{' '}
-            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-              AI Does The First Pass Live.
-            </span>
-          </h1>
-
-          {/* Subtitle */}
-          <p className="mt-6 max-w-2xl text-base text-neutral-400 sm:text-lg">
-            Connect your GitHub repositories, trigger instant file-by-file AI feedback, and resolve
-            bugs, security flaws, and code smells with your team in real time.
-          </p>
-
-          {/* CTA Buttons */}
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-            {user ? (
-              <a href="/dashboard">
-                <Button size="lg" className="gap-2.5">
-                  <span>Go to Dashboard</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </a>
-            ) : (
-              <Button onClick={login} size="lg" className="gap-2.5 shadow-xl shadow-emerald-500/25">
-                <GitFork className="h-5 w-5" />
-                <span>Start Reviewing with GitHub</span>
-              </Button>
-            )}
-            <a href="#features">
-              <Button variant="outline" size="lg" className="gap-2">
-                <Sparkles className="h-4 w-4 text-emerald-400" />
-                <span>How It Works</span>
-              </Button>
-            </a>
-          </div>
-
-          {/* Review Mock Interface */}
-          <div className="relative mt-16 w-full max-w-5xl rounded-2xl border border-neutral-800 bg-neutral-900/60 p-2 shadow-2xl backdrop-blur-2xl sm:p-3">
-            <div className="overflow-hidden rounded-xl border border-neutral-800/80 bg-neutral-950">
-              {/* Window Header */}
-              <div className="flex items-center justify-between border-b border-neutral-800/80 bg-neutral-900/80 px-4 py-3 text-xs text-neutral-400">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="h-3 w-3 rounded-full bg-rose-500/80" />
-                    <div className="h-3 w-3 rounded-full bg-amber-500/80" />
-                    <div className="h-3 w-3 rounded-full bg-emerald-500/80" />
-                  </div>
-                  <div className="ml-3 flex items-center gap-2 rounded-md bg-neutral-800/80 px-2.5 py-1 text-neutral-300 font-mono text-[11px]">
-                    <GitPullRequest className="h-3 w-3 text-emerald-400" />
-                    <span>feat/streaming-reviews #42</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px]">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                    </span>
-                    Streaming... ({streamingProgress}/3 files)
-                  </span>
-                  <div className="hidden sm:flex items-center gap-1 bg-neutral-800/60 rounded-md p-0.5">
-                    <button
-                      onClick={() => setActiveTab('diff')}
-                      className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                        activeTab === 'diff' ? 'bg-neutral-700 text-white' : 'text-neutral-400'
-                      }`}
-                    >
-                      Diff View
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('feed')}
-                      className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                        activeTab === 'feed' ? 'bg-neutral-700 text-white' : 'text-neutral-400'
-                      }`}
-                    >
-                      Live Feed ({comments.length})
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Window Body: Interactive Preview */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[380px] divide-y lg:divide-y-0 lg:divide-x divide-neutral-800/80 text-left font-mono text-xs">
-                {/* Left Pane: Diff Preview */}
-                <div className="lg:col-span-7 p-4 bg-neutral-950/90 overflow-x-auto">
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-900 text-[11px] text-neutral-400">
-                    <span className="font-semibold text-neutral-300">src/auth/jwt.service.ts</span>
-                    <span className="text-emerald-400">+24 -8 lines</span>
-                  </div>
-                  <div className="space-y-1 leading-relaxed select-none">
-                    <div className="text-neutral-400 opacity-60">40 | export function verifyToken(token: string) &#123;</div>
-                    <div className="text-neutral-400 opacity-60">41 |   try &#123;</div>
-                    <div className="bg-rose-950/40 text-rose-300 border-l-2 border-rose-500 px-2 py-0.5 rounded-r">
-                      42 -   const secret = process.env.JWT_SECRET || &apos;default_secret&apos;;
-                    </div>
-                    <div className="bg-emerald-950/40 text-emerald-300 border-l-2 border-emerald-500 px-2 py-0.5 rounded-r">
-                      43 +   const secret = getRequiredEnv(&apos;JWT_SECRET&apos;);
-                    </div>
-                    <div className="text-neutral-400 opacity-60">44 |     return jwt.verify(token, secret);</div>
-                    <div className="text-neutral-400 opacity-60">45 |   &#125; catch (err) &#123;</div>
-                    <div className="text-neutral-400 opacity-60">46 |     throw new AuthException(err);</div>
-                    <div className="text-neutral-400 opacity-60">47 |   &#125;</div>
-                    <div className="text-neutral-400 opacity-60">48 | &#125;</div>
-                  </div>
-
-                  {/* Inline Gemini Comment Callout */}
-                  <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3.5 shadow-lg backdrop-blur-sm">
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="security">Security</Badge>
-                        <span className="text-[11px] text-neutral-400 font-sans">Line 42</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-400 font-sans flex items-center gap-1">
-                        <Sparkles className="h-3 w-3" /> Gemini AI
-                      </span>
-                    </div>
-                    <p className="text-xs text-neutral-200 font-sans leading-relaxed">
-                      Fallback secret key could allow signature forgery in production environments
-                      if JWT_SECRET is omitted.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right Pane: Live Comment Feed */}
-                <div className="lg:col-span-5 p-4 bg-neutral-900/30 flex flex-col justify-between font-sans">
-                  <div>
-                    <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-800 text-xs">
-                      <span className="font-semibold text-neutral-300">Live AI Feed</span>
-                      <span className="text-neutral-400 text-[11px]">3 Issues Detected</span>
-                    </div>
-
-                    <div className="space-y-3">
-                      {comments.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`rounded-xl border p-3 transition-all duration-200 ${
-                            item.resolved
-                              ? 'border-emerald-900/40 bg-emerald-950/10 opacity-70'
-                              : 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-700'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <Badge variant={item.severity}>{item.severity}</Badge>
-                              <span className="text-[11px] font-mono text-neutral-400">
-                                {item.file}:{item.line}
-                              </span>
-                            </div>
-                            {item.resolved && (
-                              <span className="text-[11px] text-emerald-400 flex items-center gap-1">
-                                <CheckCircle2 className="h-3 w-3" /> Resolved
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-neutral-300 leading-relaxed">{item.message}</p>
-                          <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px]">
-                            <button
-                              onClick={() => handleUpvote(item.id)}
-                              className="flex items-center gap-1 text-neutral-400 hover:text-emerald-400 transition-colors"
-                            >
-                              <ThumbsUp className="h-3 w-3" />
-                              <span>{item.upvotes}</span>
-                            </button>
-                            <button
-                              onClick={() => toggleResolve(item.id)}
-                              className="text-xs text-neutral-400 hover:text-white transition-colors"
-                            >
-                              {item.resolved ? 'Reopen' : 'Mark Resolved'}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                      Live session synced
-                    </span>
-                    <span>2 reviewers connected</span>
-                  </div>
-                </div>
-              </div>
+      <div className="mx-auto max-w-7xl">
+        <div className="grid items-center gap-14 lg:grid-cols-[.92fr_1.08fr]">
+          <div className="max-w-2xl">
+            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-400/[.08] px-3 py-1.5 text-xs font-semibold text-violet-200">
+              <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /><span className="relative h-2 w-2 rounded-full bg-emerald-400" /></span>
+              YOUR PRS, UNDERSTOOD IN CONTEXT
+            </div>
+            <h1 className="text-balance text-5xl font-black tracking-[-0.055em] text-white sm:text-6xl lg:text-7xl">
+              Turn every pull request into a{' '}
+              <span className="bg-gradient-to-r from-violet-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent">clearer decision.</span>
+            </h1>
+            <p className="mt-7 max-w-xl text-pretty text-base leading-7 text-neutral-400 sm:text-lg">
+              ReviewCopilot traces the path from change to consequence, then brings your team into the same conversation—while the code is still fresh.
+            </p>
+            <div className="mt-9 flex flex-wrap gap-3">
+              {user ? (
+                <Link href="/dashboard"><Button size="lg" className="gap-2 bg-white text-neutral-950 hover:bg-neutral-200"><span>Open command center</span><ArrowRight className="h-4 w-4" /></Button></Link>
+              ) : (
+                <Button onClick={login} size="lg" className="gap-2 bg-white text-neutral-950 hover:bg-neutral-200"><GitFork className="h-4 w-4" /><span>Connect GitHub</span></Button>
+              )}
+              <a href="#workflow"><Button variant="outline" size="lg" className="border-white/10 bg-white/[.03] text-neutral-200 hover:bg-white/[.08]">Explore the flow</Button></a>
+            </div>
+            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-xs font-medium text-neutral-400">
+              <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-400" />Scope-aware feedback</span>
+              <span className="flex items-center gap-2"><CircleDot className="h-4 w-4 text-cyan-300" />Human decisions stay human</span>
             </div>
           </div>
+
+          <div className="[perspective:1200px]" onPointerMove={handlePointerMove} onPointerLeave={() => setRotation({ x: -8, y: -10 })}>
+            <div className="relative min-h-[440px] cursor-crosshair select-none transition-transform duration-300 ease-out [transform-style:preserve-3d] sm:min-h-[500px]" style={{ transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)` }}>
+              <div className="absolute inset-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[.09] to-white/[.01] shadow-[0_35px_90px_rgba(0,0,0,.45)] backdrop-blur-xl [transform:translateZ(-40px)]" />
+              <div className="absolute left-[14%] right-[14%] top-1/2 h-px bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent [transform:translateZ(5px)]" />
+              <div className="absolute left-1/2 top-[18%] h-[65%] w-px bg-gradient-to-b from-transparent via-violet-300/50 to-transparent [transform:translateZ(2px)]" />
+              {stages.map((stage, index) => {
+                const Icon = stage.icon;
+                const active = selectedStage === stage.id;
+                const positions = ['left-[7%] top-[18%]', 'left-1/2 top-1/2', 'right-[7%] bottom-[17%]'];
+                return (
+                  <button key={stage.id} onClick={() => setSelectedStage(stage.id)} className={`absolute ${positions[index]} group -translate-x-1/2 -translate-y-1/2 text-left [transform-style:preserve-3d]`}>
+                    <span className={`absolute -inset-5 rounded-full bg-gradient-to-r ${stage.tone} ${active ? 'opacity-25' : 'opacity-0'} blur-2xl transition-opacity group-hover:opacity-20`} />
+                    <span className={`relative flex w-44 flex-col rounded-2xl border p-4 transition-all duration-300 sm:w-48 ${active ? 'border-white/30 bg-neutral-900/95 shadow-2xl [transform:translateZ(52px)]' : 'border-white/10 bg-neutral-950/75 [transform:translateZ(20px)] group-hover:border-white/25 group-hover:[transform:translateZ(38px)]'}`}>
+                      <span className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stage.tone} text-neutral-950 shadow-lg`}><Icon className="h-5 w-5" /></span>
+                      <span className="text-sm font-bold text-white">{stage.label}</span>
+                      <span className="mt-1 text-[11px] text-neutral-400">{stage.detail}</span>
+                      {active && <span className="mt-3 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300"><Check className="h-3 w-3" /> Observing</span>}
+                    </span>
+                  </button>
+                );
+              })}
+              <div className="absolute bottom-[7%] left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-neutral-950/85 px-4 py-2 text-[11px] text-neutral-300 shadow-xl [transform:translateZ(42px)]"><Boxes className="h-3.5 w-3.5 text-cyan-300" />Drag your attention across the system</div>
+              <div className="absolute right-[9%] top-[8%] flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-200 [transform:translateZ(58px)]"><Sparkles className="h-3.5 w-3.5" />LIVE CONTEXT</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="workflow" className="mt-16 grid gap-3 border-t border-white/10 pt-6 sm:grid-cols-3">
+          {['Connect a repository', 'Review the meaningful changes', 'Resolve with context'].map((item, index) => (
+            <div key={item} className="flex items-center gap-4 rounded-2xl border border-white/[.07] bg-white/[.025] p-4"><span className="font-mono text-xs text-violet-300">0{index + 1}</span><span className="text-sm font-semibold text-neutral-200">{item}</span><Code2 className="ml-auto h-4 w-4 text-neutral-600" /></div>
+          ))}
         </div>
       </div>
     </section>
