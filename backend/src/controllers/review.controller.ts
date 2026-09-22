@@ -132,7 +132,15 @@ export const reviewController = {
           }
 
           filesReviewed++;
-          await Review.findByIdAndUpdate(review._id, { filesReviewed, totalComments });
+          // CRITICAL FIX: Use atomic $inc to prevent race conditions
+          // Note: totalComments was already incremented in the try block
+          await Review.updateOne(
+            { _id: review._id },
+            {
+              $inc: { filesReviewed: 1 },
+              $set: { updatedAt: new Date() },
+            }
+          );
 
           io?.to(`review:${reviewId}`).emit('review:progress', {
             reviewId,
@@ -252,6 +260,13 @@ export const reviewController = {
         return;
       }
 
+      // CRITICAL FIX: Verify authorization - user must own the review
+      const review = await Review.findById(comment.reviewId);
+      if (!review || review.requestedBy.toString() !== req.user.userId) {
+        res.status(403).json({ error: 'Not authorized to modify this review' });
+        return;
+      }
+
       comment.resolved = !comment.resolved;
       comment.resolvedBy = comment.resolved
         ? new mongoose.Types.ObjectId(req.user.userId)
@@ -295,6 +310,13 @@ export const reviewController = {
       const comment = await Comment.findById(commentId);
       if (!comment) {
         res.status(404).json({ error: 'Comment not found' });
+        return;
+      }
+
+      // CRITICAL FIX: Verify authorization - user must own the review
+      const review = await Review.findById(comment.reviewId);
+      if (!review || review.requestedBy.toString() !== req.user.userId) {
+        res.status(403).json({ error: 'Not authorized to modify this review' });
         return;
       }
 

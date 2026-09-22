@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Github,
+  GitFork,
   Sparkles,
   ArrowRight,
   ShieldAlert,
@@ -119,7 +119,7 @@ export function HeroSection() {
               </a>
             ) : (
               <Button onClick={login} size="lg" className="gap-2.5 shadow-xl shadow-emerald-500/25">
-                <Github className="h-5 w-5" />
+                <GitFork className="h-5 w-5" />
                 <span>Start Reviewing with GitHub</span>
               </Button>
             )}

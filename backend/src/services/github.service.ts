@@ -75,7 +75,7 @@ export const githubService = {
     const params = new URLSearchParams({
       client_id: config.github.clientId,
       scope: 'repo read:user user:email',
-      redirect_uri: `http://localhost:${config.port}/auth/github/callback`,
+      redirect_uri: config.github.oauthRedirectUri,
     });
     return `https://github.com/login/oauth/authorize?${params.toString()}`;
   },

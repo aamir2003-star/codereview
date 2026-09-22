@@ -36,6 +36,14 @@ export function setupReviewSockets(io: Server): void {
 
   io.on('connection', (socket: AuthenticatedSocket) => {
     const user = socket.data.user;
+
+    // CRITICAL: Disconnect unauthenticated sockets immediately
+    if (!user) {
+      console.warn(`[Socket.io] Rejecting unauthenticated connection: ${socket.id}`);
+      socket.disconnect(true);
+      return;
+    }
+
     console.log(`[Socket.io] User connected: ${user?.username} (${socket.id})`);
 
     // Join a review room

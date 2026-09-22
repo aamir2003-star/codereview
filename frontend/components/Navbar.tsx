@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
-import { Github, Code2, Sparkles, LogOut, LayoutDashboard } from 'lucide-react';
+import { GitFork, Code2, Sparkles, LogOut, LayoutDashboard } from 'lucide-react';
 
 export function Navbar() {
   const { user, login, logout, isLoading } = useAuth();
@@ -73,7 +73,7 @@ export function Navbar() {
                 size="sm"
                 className="gap-2 text-xs font-semibold bg-white hover:bg-neutral-100 text-neutral-950 border-0 shadow-none"
               >
-                <Github className="h-4 w-4" />
+                <GitFork className="h-4 w-4" />
                 <span>Connect GitHub</span>
               </Button>
             </div>

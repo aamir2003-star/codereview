@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Github, Code2, Sparkles, AlertCircle } from 'lucide-react';
+import { GitFork, Code2, Sparkles, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 function LoginForm() {
@@ -58,7 +58,7 @@ function LoginForm() {
               size="lg"
               className="w-full gap-3 font-semibold bg-white hover:bg-neutral-100 text-neutral-950 border-0 shadow-lg shadow-white/5"
             >
-              <Github className="h-5 w-5" />
+              <GitFork className="h-5 w-5" />
               <span>Continue with GitHub</span>
             </Button>
           </CardContent>

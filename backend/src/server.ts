@@ -20,11 +20,14 @@ export const io = new Server(server, {
 setIO(io);
 setupReviewSockets(io);
 
-// Start HTTP server immediately
+// Start HTTP server immediately (don't wait for DB)
 server.listen(config.port, () => {
   console.log(`[Server] Running on http://localhost:${config.port}`);
   console.log(`[Environment] ${config.nodeEnv}`);
 });
 
-// Connect to MongoDB asynchronously
-connectDB();
+// Connect to MongoDB asynchronously without blocking startup
+// DB connection failures won't crash the server, but queries will fail
+connectDB().catch((err) => {
+  console.error('[Startup] MongoDB connection failed, but server is running:', err instanceof Error ? err.message : err);
+});
