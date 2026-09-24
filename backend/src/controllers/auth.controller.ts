@@ -9,23 +9,18 @@ import { AuthenticatedRequest, JwtPayload } from '../middleware/auth.middleware'
 
 export const authController = {
   /**
-   * Redirect user to GitHub OAuth login.
-   * Pass ?force=true to route through GitHub's login page and force
-   * re-authentication (used after in-app logout).
+   * Redirect user to GitHub OAuth login
    */
-  redirectToGitHub(req: Request, res: Response): void {
+  redirectToGitHub(_req: Request, res: Response): void {
     const state = crypto.randomBytes(32).toString('hex');
-    const forceLogin = req.query.force === 'true';
-
     res.cookie('github_oauth_state', state, {
       httpOnly: true,
       sameSite: 'lax',
       secure: config.nodeEnv === 'production',
-      maxAge: 10 * 60 * 1000, // 10 minutes
+      maxAge: 10 * 60 * 1000,
       path: '/auth/github/callback',
     });
-
-    const authUrl = githubService.getOAuthUrl(state, forceLogin);
+    const authUrl = githubService.getOAuthUrl(state);
     res.redirect(authUrl);
   },
 

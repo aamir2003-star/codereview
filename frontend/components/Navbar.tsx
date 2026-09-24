@@ -30,62 +30,56 @@ export function Navbar() {
         {/* Navigation / Actions */}
         <div className="flex items-center gap-3">
           {isLoading ? (
-            <div className="h-9 w-32 animate-pulse rounded-xl bg-neutral-800" />
+            <div className="h-9 w-24 animate-pulse rounded-xl bg-neutral-800" />
           ) : user ? (
-            /* ── Authenticated state ── */
-            <div className="flex items-center gap-2">
-              {/* Dashboard link */}
+            <div className="flex items-center gap-3">
               <Link href="/dashboard">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs hidden sm:flex">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
                   <LayoutDashboard className="h-3.5 w-3.5" />
                   Dashboard
                 </Button>
               </Link>
-
-              {/* Divider + user info */}
-              <div className="flex items-center gap-2 pl-2 border-l border-neutral-800">
-                {/* Avatar */}
+              <div className="flex items-center gap-2.5 pl-2 border-l border-neutral-800">
                 {user.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={user.avatarUrl}
                     alt={user.username}
-                    className="h-7 w-7 rounded-full ring-1 ring-neutral-700 shrink-0"
+                    className="h-7 w-7 rounded-full ring-1 ring-neutral-700"
                   />
                 ) : (
-                  <div className="h-7 w-7 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-medium shrink-0">
+                  <div className="h-7 w-7 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-medium">
                     {user.username.charAt(0).toUpperCase()}
                   </div>
                 )}
-
-                {/* Username — hidden on mobile */}
-                <span className="text-xs font-medium text-neutral-300 hidden sm:inline-block max-w-[120px] truncate">
+                <span className="text-xs font-medium text-neutral-300 hidden sm:inline-block">
                   {user.username}
                 </span>
 
-                {/* Logout button — clear, labelled, always visible */}
+                {/* Prominent Log Out Button */}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={logout}
-                  className="gap-1.5 text-xs text-neutral-400 hover:bg-rose-500/10 hover:text-rose-300 border border-transparent hover:border-rose-500/20 transition-all"
-                  title="Sign out and clear session"
+                  title="Sign out and disconnect GitHub session"
+                  className="h-8 gap-1.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 border border-transparent hover:border-rose-500/20 transition-colors"
                 >
                   <LogOut className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline-block">Logout</span>
+                  <span className="hidden sm:inline-block">Log out</span>
                 </Button>
               </div>
             </div>
           ) : (
-            /* ── Unauthenticated state ── */
-            <Button
-              onClick={login}
-              size="sm"
-              className="gap-2 text-xs font-semibold bg-white hover:bg-neutral-100 text-neutral-950 border-0 shadow-none"
-            >
-              <GitFork className="h-4 w-4" />
-              <span>Connect GitHub</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={login}
+                size="sm"
+                className="gap-2 text-xs font-semibold bg-white hover:bg-neutral-100 text-neutral-950 border-0 shadow-none"
+              >
+                <GitFork className="h-4 w-4" />
+                <span>Connect GitHub</span>
+              </Button>
+            </div>
           )}
         </div>
       </div>

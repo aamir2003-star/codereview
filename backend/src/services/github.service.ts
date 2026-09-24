@@ -71,22 +71,15 @@ export interface GitHubFileDiff {
 }
 
 export const githubService = {
-  getOAuthUrl(state: string, forceLogin = false): string {
+  getOAuthUrl(state: string): string {
     const params = new URLSearchParams({
       client_id: config.github.clientId,
       scope: 'repo read:user user:email',
       redirect_uri: config.github.oauthRedirectUri,
       state,
+      allow_signup: 'true',
+      prompt: 'consent',
     });
-
-    // When forceLogin=true (user just logged out), we build a URL that
-    // routes through github.com/login first so GitHub clears its session
-    // cookie and shows the login form instead of auto-approving.
-    if (forceLogin) {
-      const oauthUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
-      return `https://github.com/login?return_to=${encodeURIComponent(oauthUrl)}`;
-    }
-
     return `https://github.com/login/oauth/authorize?${params.toString()}`;
   },
 

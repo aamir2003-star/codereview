@@ -24,10 +24,11 @@ import {
   resolveComment,
   upvoteComment,
 } from '@/lib/review-api';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, AlertCircle, LogOut, GitFork, Sparkles } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { user, token, isLoading: authLoading } = useAuth();
+  const { user, token, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
 
   const [repos, setRepos] = useState<Repository[]>([]);
@@ -238,6 +239,49 @@ export default function DashboardPage() {
             <p>{error}</p>
           </div>
         )}
+        {/* Account Profile Header */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 sm:px-6 backdrop-blur-xl">
+          <div className="flex items-center gap-3.5">
+            {user?.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.avatarUrl}
+                alt={user.username}
+                className="h-10 w-10 rounded-full ring-2 ring-emerald-500/20 border border-neutral-700"
+              />
+            ) : (
+              <div className="h-10 w-10 rounded-full bg-neutral-800 flex items-center justify-center font-bold text-sm text-neutral-300">
+                {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-bold text-white">
+                  Welcome, @{user?.username}
+                </h1>
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
+                  <Sparkles className="h-2.5 w-2.5" /> Active Session
+                </span>
+              </div>
+              <p className="text-xs text-neutral-400 font-mono mt-0.5">
+                Connected via GitHub OAuth &bull; {repos.length} repositories available
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={logout}
+              className="gap-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border-neutral-800 hover:border-rose-500/30 transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Log out</span>
+            </Button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           <div className="md:col-span-5 lg:col-span-4">
             <RepoList

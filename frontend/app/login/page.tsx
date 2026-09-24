@@ -5,28 +5,13 @@ import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { GitFork, Code2, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { GitFork, Code2, Sparkles, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
 function LoginForm() {
   const { login } = useAuth();
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
-  // loggedOut=1 means the user explicitly logged out — we force GitHub re-auth
-  const loggedOut = searchParams.get('loggedOut') === '1';
-
-  // When user just logged out, link through ?force=true so the backend
-  // routes them through github.com/login first (clearing GitHub's session)
-  const handleLogin = () => {
-    if (loggedOut) {
-      // Force GitHub to show its login page instead of auto-approving
-      window.location.href = `${API_URL}/auth/github?force=true`;
-    } else {
-      login();
-    }
-  };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-neutral-950 px-4 py-12 relative overflow-hidden">
@@ -47,20 +32,7 @@ function LoginForm() {
           </p>
         </div>
 
-        {/* Logged out success notice */}
-        {loggedOut && !error && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-xs text-emerald-300">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
-            <div>
-              <p className="font-semibold text-emerald-200">Signed out successfully</p>
-              <p className="mt-0.5 text-neutral-300">
-                Connect a GitHub account below to sign back in.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Error Alert */}
+        {/* Error Alert if any */}
         {error && (
           <div className="mb-6 flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 text-xs text-rose-300">
             <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
@@ -74,24 +46,20 @@ function LoginForm() {
         {/* Login Card */}
         <Card className="border-neutral-800 bg-neutral-900/70 shadow-2xl backdrop-blur-xl">
           <CardHeader className="text-center pb-6">
-            <CardTitle className="text-2xl font-bold text-white">
-              {loggedOut ? 'Sign back in' : 'Welcome'}
-            </CardTitle>
+            <CardTitle className="text-2xl font-bold text-white">Welcome</CardTitle>
             <CardDescription className="text-xs text-neutral-400 mt-1">
-              {loggedOut
-                ? 'Connect your GitHub account to continue reviewing pull requests.'
-                : 'Sign in with your GitHub account to access your repositories and review pull requests.'}
+              Sign in with your GitHub account to access your repositories and review pull requests.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <Button
-              onClick={handleLogin}
+              onClick={login}
               size="lg"
               className="w-full gap-3 font-semibold bg-white hover:bg-neutral-100 text-neutral-950 border-0 shadow-lg shadow-white/5"
             >
               <GitFork className="h-5 w-5" />
-              <span>{loggedOut ? 'Connect GitHub Account' : 'Continue with GitHub'}</span>
+              <span>Continue with GitHub</span>
             </Button>
           </CardContent>
 
