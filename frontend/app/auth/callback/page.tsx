@@ -23,8 +23,12 @@ function CallbackHandler() {
     }
 
     if (token) {
-      setAuthToken(token).then(() => {
-        setAuthenticated(true);
+      setAuthToken(token).then((success) => {
+        if (success) {
+          setAuthenticated(true);
+        } else {
+          router.push('/login?error=Failed+to+fetch+user+profile.+Please+ensure+backend+is+running.');
+        }
       });
     } else {
       router.push('/login');

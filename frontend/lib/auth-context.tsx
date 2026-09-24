@@ -18,7 +18,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: () => void;
   logout: () => void;
-  setAuthToken: (token: string) => Promise<void>;
+  setAuthToken: (token: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const router = useRouter();
 
-  const fetchUser = async (authToken: string) => {
+  const fetchUser = async (authToken: string): Promise<boolean> => {
     try {
       const response = await fetch(`${API_URL}/auth/me`, {
         headers: {
@@ -44,17 +44,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         setToken(authToken);
         localStorage.setItem('auth_token', authToken);
+        return true;
       } else {
-        // Token is invalid or expired — purge it
         localStorage.removeItem('auth_token');
         setUser(null);
         setToken(null);
+        return false;
       }
     } catch (error) {
       console.error('Error fetching user:', error);
       localStorage.removeItem('auth_token');
       setUser(null);
       setToken(null);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -70,29 +72,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = () => {
-    // Navigate to GitHub OAuth route with timestamp to avoid cached redirects
     window.location.href = `${API_URL}/auth/github?_t=${Date.now()}`;
   };
 
   const logout = () => {
-    // 1. Disconnect any active socket sessions
     disconnectSocket();
-
-    // 2. Completely delete JWT token and cached user credentials
     localStorage.removeItem('auth_token');
     sessionStorage.clear();
-
-    // 3. Reset application state
     setUser(null);
     setToken(null);
-
-    // 4. Redirect to login page
     router.push('/login');
   };
 
-  const setAuthToken = async (newToken: string) => {
+  const setAuthToken = async (newToken: string): Promise<boolean> => {
     setIsLoading(true);
-    await fetchUser(newToken);
+    return await fetchUser(newToken);
   };
 
   return (
