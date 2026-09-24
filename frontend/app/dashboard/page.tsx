@@ -24,6 +24,7 @@ import {
   resolveComment,
   upvoteComment,
 } from '@/lib/review-api';
+import { ReviewSummaryCard } from '@/components/dashboard/ReviewSummaryCard';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, LogOut, GitFork, Sparkles } from 'lucide-react';
 
@@ -294,7 +295,15 @@ export default function DashboardPage() {
               isLoading={loadingRepos}
             />
           </div>
-          <div className="md:col-span-7 lg:col-span-8">
+          <div className="md:col-span-7 lg:col-span-8 space-y-6">
+            {selectedRepo && (
+              <ReviewSummaryCard
+                repoName={selectedRepo.full_name}
+                totalPRs={pullRequests.length}
+                unresolvedCount={reviewComments.filter((c) => !c.resolved).length}
+                rawHtmlNotice="<em>Note: AI review engine v2.0 is active.</em>"
+              />
+            )}
             <PrList
               repo={selectedRepo}
               pullRequests={pullRequests}
