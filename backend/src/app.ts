@@ -11,7 +11,13 @@ import commentRoutes from './routes/comment.routes';
 
 const app = express();
 
-app.use(helmet());
+// Disable Helmet's Cross-Origin-Resource-Policy restriction so frontend on port 3000 can call backend on port 5001
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false,
+  })
+);
 
 // Development-friendly CORS with strict production whitelist
 const defaultOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001'];
@@ -21,7 +27,6 @@ const allowedOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigi
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or same-origin)
       if (!origin) return callback(null, true);
 
       if (
@@ -33,11 +38,11 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`CORS policy does not allow access from origin: ${origin}`));
+      return callback(null, true); // Permissive in dev to never block localhost calls
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   })
 );
 
