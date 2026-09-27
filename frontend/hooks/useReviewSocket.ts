@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
 import { PersistedComment } from '@/lib/review-api';
 
@@ -37,8 +37,30 @@ export function useReviewSocket({
   const [progress, setProgress] = useState<ReviewProgress | null>(null);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
+  // Keep callback references stable to prevent re-triggering socket subscriptions on every render
+  const callbacksRef = useRef({
+    onNewComment,
+    onCommentResolved,
+    onCommentUpvoted,
+    onReviewComplete,
+  });
+
   useEffect(() => {
-    if (!reviewId || !token) return;
+    callbacksRef.current = {
+      onNewComment,
+      onCommentResolved,
+      onCommentUpvoted,
+      onReviewComplete,
+    };
+  });
+
+  useEffect(() => {
+    if (!reviewId || !token) {
+      setActiveUsers([]);
+      setProgress(null);
+      setIsStreaming(false);
+      return;
+    }
 
     const socket = getSocket(token);
 
@@ -48,21 +70,21 @@ export function useReviewSocket({
     // Handle incoming new comment stream
     const handleNewComment = (data: { reviewId: string; comment: PersistedComment }) => {
       if (data.reviewId === reviewId) {
-        onNewComment?.(data.comment);
+        callbacksRef.current.onNewComment?.(data.comment);
       }
     };
 
     // Handle comment resolved live sync
     const handleResolved = (data: { reviewId: string; commentId: string; resolved: boolean; resolvedBy: string }) => {
       if (data.reviewId === reviewId) {
-        onCommentResolved?.(data);
+        callbacksRef.current.onCommentResolved?.(data);
       }
     };
 
     // Handle comment upvoted live sync
     const handleUpvoted = (data: { reviewId: string; commentId: string; upvotes: string[] }) => {
       if (data.reviewId === reviewId) {
-        onCommentUpvoted?.(data);
+        callbacksRef.current.onCommentUpvoted?.(data);
       }
     };
 
@@ -82,7 +104,7 @@ export function useReviewSocket({
     const handleComplete = (data: { reviewId: string; totalComments: number }) => {
       if (data.reviewId === reviewId) {
         setIsStreaming(false);
-        onReviewComplete?.(data);
+        callbacksRef.current.onReviewComplete?.(data);
       }
     };
 
@@ -109,14 +131,7 @@ export function useReviewSocket({
       socket.off('review:complete', handleComplete);
       socket.off('presence:update', handlePresence);
     };
-  }, [
-    reviewId,
-    token,
-    onNewComment,
-    onCommentResolved,
-    onCommentUpvoted,
-    onReviewComplete,
-  ]);
+  }, [reviewId, token]); // Stable: only re-subscribes when reviewId or token actually changes!
 
   return {
     activeUsers,
