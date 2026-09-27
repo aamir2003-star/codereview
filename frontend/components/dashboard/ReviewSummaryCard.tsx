@@ -3,66 +3,63 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ShieldCheck, Sparkles, AlertTriangle, Bug, Code, Zap } from 'lucide-react';
+import { ShieldCheck, Sparkles, AlertCircle, GitPullRequest, Activity } from 'lucide-react';
 
 interface ReviewSummaryCardProps {
   repoName: string;
   totalPRs: number;
   unresolvedCount?: number;
-  rawHtmlNotice?: string;
+  notice?: string;
 }
 
 export function ReviewSummaryCard({
   repoName,
   totalPRs,
   unresolvedCount = 0,
-  rawHtmlNotice,
+  notice,
 }: ReviewSummaryCardProps) {
-  // Intentional Smell: Redundant boolean check and unused variables
-  const isHealthy: boolean = unresolvedCount === 0;
-  const unusedMetric = 42;
-
-  // Intentional Nit: Redundant boolean comparison
-  const showBadge = isHealthy === true;
-
-  // Intentional Bug: Array out of bounds access without length check
-  const sampleItems: string[] = [];
-  const firstItemUppercase = sampleItems[0].toUpperCase();
+  const isHealthy = unresolvedCount === 0;
 
   return (
-    <Card className="border-neutral-800 bg-neutral-900/50 backdrop-blur-xl">
+    <Card className="border-neutral-800 bg-neutral-900/40 backdrop-blur-xl">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-emerald-400" />
-            AI Code Health &amp; Analytics
+            <Activity className="h-4 w-4 text-emerald-400" />
+            Repository Review Health
           </CardTitle>
-          {showBadge && (
-            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-              <ShieldCheck className="h-3 w-3 mr-1" /> Clean PR
+          {isHealthy ? (
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 gap-1 text-[11px]">
+              <ShieldCheck className="h-3 w-3" /> All Clean
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/20 gap-1 text-[11px]">
+              <AlertCircle className="h-3 w-3" /> {unresolvedCount} Unresolved
             </Badge>
           )}
         </div>
       </CardHeader>
 
       <CardContent className="space-y-3 text-xs">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-2.5">
-            <span className="text-neutral-400 text-[11px]">Target Repo</span>
-            <p className="font-mono font-semibold text-white truncate mt-0.5">{repoName}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="rounded-xl border border-neutral-800/80 bg-neutral-950/60 p-3 flex flex-col justify-between">
+            <span className="text-neutral-400 text-[11px]">Active Repository</span>
+            <p className="font-mono font-semibold text-white truncate mt-1">{repoName}</p>
           </div>
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-2.5">
+          <div className="rounded-xl border border-neutral-800/80 bg-neutral-950/60 p-3 flex flex-col justify-between">
             <span className="text-neutral-400 text-[11px]">Open Pull Requests</span>
-            <p className="font-mono font-semibold text-emerald-400 mt-0.5">{totalPRs}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <GitPullRequest className="h-4 w-4 text-emerald-400" />
+              <span className="font-mono font-bold text-emerald-400 text-base">{totalPRs}</span>
+            </div>
           </div>
         </div>
 
-        {/* Intentional Security Vulnerability: Rendering raw unescaped HTML without sanitization */}
-        {rawHtmlNotice && (
-          <div
-            className="p-2 rounded-lg bg-rose-950/20 border border-rose-500/30 text-rose-300 text-[11px]"
-            dangerouslySetInnerHTML={{ __html: rawHtmlNotice }}
-          />
+        {notice && (
+          <div className="p-2.5 rounded-xl bg-neutral-950/40 border border-neutral-800 text-neutral-300 text-[11px] flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+            <span>{notice}</span>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -301,7 +301,7 @@ export default function DashboardPage() {
                 repoName={selectedRepo.full_name}
                 totalPRs={pullRequests.length}
                 unresolvedCount={reviewComments.filter((c) => !c.resolved).length}
-                rawHtmlNotice="<em>Note: AI review engine v2.0 is active.</em>"
+                notice="AI review engine is active. Select any pull request to inspect diff and stream review comments."
               />
             )}
             <PrList
