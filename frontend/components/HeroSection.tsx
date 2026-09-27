@@ -1,107 +1,251 @@
 'use client';
 
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import {
   ArrowRight,
-  Bot,
-  Boxes,
-  Check,
-  CircleDot,
-  Code2,
+  Sparkles,
   GitFork,
   GitPullRequest,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  X,
+  ShieldAlert,
+  Bug,
+  Lightbulb,
+  CheckCircle2,
+  Terminal,
+  Zap,
+  Activity,
+  Layers,
+  Cpu,
 } from 'lucide-react';
-
-const stages = [
-  { id: 'pull', label: 'Pull request', detail: 'GitHub event', icon: GitPullRequest, tone: 'from-violet-500 to-fuchsia-500' },
-  { id: 'engine', label: 'Review engine', detail: 'Context-aware scan', icon: Bot, tone: 'from-cyan-400 to-blue-500' },
-  { id: 'team', label: 'Your team', detail: 'Live decisions', icon: Users, tone: 'from-emerald-400 to-teal-500' },
-];
 
 export function HeroSection() {
   const { user, login } = useAuth();
-  const [selectedStage, setSelectedStage] = useState('engine');
-  const [rotation, setRotation] = useState({ x: -8, y: -10 });
+  const [activeTab, setActiveTab] = useState<'diff' | 'ai'>('diff');
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setRotation({
-      x: ((event.clientY - rect.top) / rect.height - 0.5) * -14,
-      y: ((event.clientX - rect.left) / rect.width - 0.5) * 18,
-    });
+  // Interactive 3D tilt
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+
+  const mouseXSpring = useSpring(x, { stiffness: 200, damping: 20 });
+  const mouseYSpring = useSpring(y, { stiffness: 200, damping: 20 });
+
+  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], [10, -10]);
+  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], [-12, 12]);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    x.set(mouseX / width - 0.5);
+    y.set(mouseY / height - 0.5);
+  };
+
+  const handleMouseLeave = () => {
+    x.set(0);
+    y.set(0);
   };
 
   return (
-    <section className="relative isolate overflow-hidden px-4 pb-24 pt-14 sm:px-6 lg:pb-32 lg:pt-24">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgba(139,92,246,.18),transparent_28%),radial-gradient(circle_at_82%_35%,rgba(45,212,191,.16),transparent_24%)]" />
-      <div className="pointer-events-none absolute left-1/2 top-20 -z-10 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full border border-white/[.04]" />
+    <section className="relative isolate overflow-hidden px-4 pb-20 pt-10 sm:px-6 lg:pb-28 lg:pt-16">
+      {/* 3D Glowing Orb Background */}
+      <div className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-tr from-emerald-500/15 via-cyan-500/10 to-violet-500/10 blur-[130px]" />
 
       <div className="mx-auto max-w-7xl">
-        <div className="grid items-center gap-14 lg:grid-cols-[.92fr_1.08fr]">
-          <div className="max-w-2xl">
-            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-400/[.08] px-3 py-1.5 text-xs font-semibold text-violet-200">
-              <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /><span className="relative h-2 w-2 rounded-full bg-emerald-400" /></span>
-              YOUR PRS, UNDERSTOOD IN CONTEXT
-            </div>
-            <h1 className="text-balance text-5xl font-black tracking-[-0.055em] text-white sm:text-6xl lg:text-7xl">
-              Turn every pull request into a{' '}
-              <span className="bg-gradient-to-r from-violet-300 via-cyan-200 to-emerald-300 bg-clip-text text-transparent">clearer decision.</span>
+        <div className="grid items-center gap-12 lg:grid-cols-12">
+          {/* Left Column: Headlines & CTA */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="lg:col-span-6 max-w-2xl"
+          >
+            {/* Pill Badge */}
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-semibold text-emerald-300 shadow-sm shadow-emerald-500/10 backdrop-blur-md mb-6"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+              <span>Next-Gen AI Code Review Engine</span>
+              <Sparkles className="h-3 w-3 text-emerald-300" />
+            </motion.div>
+
+            {/* Main Hero Headline */}
+            <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl lg:text-6.5xl leading-[1.08]">
+              Automate code reviews with{' '}
+              <span className="bg-gradient-to-r from-emerald-400 via-cyan-300 to-teal-200 bg-clip-text text-transparent underline decoration-emerald-500/30 decoration-wavy decoration-2">
+                AI precision
+              </span>{' '}
+              in real-time.
             </h1>
-            <p className="mt-7 max-w-xl text-pretty text-base leading-7 text-neutral-400 sm:text-lg">
-              ReviewCopilot traces the path from change to consequence, then brings your team into the same conversation—while the code is still fresh.
+
+            <p className="mt-6 text-base text-neutral-400 sm:text-lg leading-relaxed max-w-xl">
+              Connect your GitHub repository. Traces subtle bugs, security vulnerabilities, and code smells across pull request diffs with streaming live updates.
             </p>
-            <div className="mt-9 flex flex-wrap gap-3">
+
+            {/* CTAs */}
+            <div className="mt-8 flex flex-wrap items-center gap-4">
               {user ? (
-                <Link href="/dashboard"><Button size="lg" className="gap-2 bg-white text-neutral-950 hover:bg-neutral-200"><span>Open command center</span><ArrowRight className="h-4 w-4" /></Button></Link>
+                <Link href="/dashboard">
+                  <Button
+                    size="lg"
+                    className="gap-2.5 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-neutral-950 font-bold shadow-lg shadow-emerald-500/25 px-6"
+                  >
+                    <span>Go to Dashboard</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
               ) : (
-                <Button onClick={login} size="lg" className="gap-2 bg-white text-neutral-950 hover:bg-neutral-200"><GitFork className="h-4 w-4" /><span>Connect GitHub</span></Button>
+                <Button
+                  onClick={login}
+                  size="lg"
+                  className="gap-2.5 bg-white hover:bg-neutral-100 text-neutral-950 font-bold shadow-xl shadow-white/10 px-6"
+                >
+                  <GitFork className="h-4 w-4" />
+                  <span>Connect GitHub</span>
+                </Button>
               )}
-              <a href="#workflow"><Button variant="outline" size="lg" className="border-white/10 bg-white/[.03] text-neutral-200 hover:bg-white/[.08]">Explore the flow</Button></a>
-            </div>
-            <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-xs font-medium text-neutral-400">
-              <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-400" />Scope-aware feedback</span>
-              <span className="flex items-center gap-2"><CircleDot className="h-4 w-4 text-cyan-300" />Human decisions stay human</span>
-            </div>
-          </div>
 
-          <div className="[perspective:1200px]" onPointerMove={handlePointerMove} onPointerLeave={() => setRotation({ x: -8, y: -10 })}>
-            <div className="relative min-h-[440px] cursor-crosshair select-none transition-transform duration-300 ease-out [transform-style:preserve-3d] sm:min-h-[500px]" style={{ transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)` }}>
-              <div className="absolute inset-8 rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[.09] to-white/[.01] shadow-[0_35px_90px_rgba(0,0,0,.45)] backdrop-blur-xl [transform:translateZ(-40px)]" />
-              <div className="absolute left-[14%] right-[14%] top-1/2 h-px bg-gradient-to-r from-transparent via-cyan-300/70 to-transparent [transform:translateZ(5px)]" />
-              <div className="absolute left-1/2 top-[18%] h-[65%] w-px bg-gradient-to-b from-transparent via-violet-300/50 to-transparent [transform:translateZ(2px)]" />
-              {stages.map((stage, index) => {
-                const Icon = stage.icon;
-                const active = selectedStage === stage.id;
-                const positions = ['left-[7%] top-[18%]', 'left-1/2 top-1/2', 'right-[7%] bottom-[17%]'];
-                return (
-                  <button key={stage.id} onClick={() => setSelectedStage(stage.id)} className={`absolute ${positions[index]} group -translate-x-1/2 -translate-y-1/2 text-left [transform-style:preserve-3d]`}>
-                    <span className={`absolute -inset-5 rounded-full bg-gradient-to-r ${stage.tone} ${active ? 'opacity-25' : 'opacity-0'} blur-2xl transition-opacity group-hover:opacity-20`} />
-                    <span className={`relative flex w-44 flex-col rounded-2xl border p-4 transition-all duration-300 sm:w-48 ${active ? 'border-white/30 bg-neutral-900/95 shadow-2xl [transform:translateZ(52px)]' : 'border-white/10 bg-neutral-950/75 [transform:translateZ(20px)] group-hover:border-white/25 group-hover:[transform:translateZ(38px)]'}`}>
-                      <span className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stage.tone} text-neutral-950 shadow-lg`}><Icon className="h-5 w-5" /></span>
-                      <span className="text-sm font-bold text-white">{stage.label}</span>
-                      <span className="mt-1 text-[11px] text-neutral-400">{stage.detail}</span>
-                      {active && <span className="mt-3 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300"><Check className="h-3 w-3" /> Observing</span>}
+              <a href="#features">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800 text-neutral-200 hover:text-white backdrop-blur-xl"
+                >
+                  Explore Capabilities
+                </Button>
+              </a>
+            </div>
+
+            {/* Stats / Trust Badges */}
+            <div className="mt-10 grid grid-cols-3 gap-4 border-t border-neutral-800/80 pt-6 text-xs text-neutral-400">
+              <div className="flex flex-col">
+                <span className="text-xl font-bold font-mono text-white">&lt; 3 sec</span>
+                <span className="text-[11px] text-neutral-400 mt-0.5">Streaming Latency</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold font-mono text-emerald-400">4-Tier</span>
+                <span className="text-[11px] text-neutral-400 mt-0.5">Severity Triage</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold font-mono text-cyan-300">100% Live</span>
+                <span className="text-[11px] text-neutral-400 mt-0.5">Socket Collaboration</span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Right Column: 3D Holographic Interactive Terminal */}
+          <div
+            className="lg:col-span-6 [perspective:1400px]"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+          >
+            <motion.div
+              style={{
+                rotateX,
+                rotateY,
+                transformStyle: 'preserve-3d',
+              }}
+              className="relative rounded-2xl border border-neutral-800 bg-neutral-950/80 p-1.5 shadow-[0_25px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-shadow duration-300 hover:shadow-[0_30px_70px_rgba(16,185,129,0.15)] hover:border-emerald-500/40"
+            >
+              {/* Top Laser Scanning Line animation */}
+              <motion.div
+                animate={{ y: ['0%', '100%', '0%'] }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+                className="pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400/80 to-transparent shadow-[0_0_15px_rgba(52,211,153,0.8)] z-30"
+              />
+
+              {/* Holographic Header */}
+              <div className="flex items-center justify-between border-b border-neutral-800/80 bg-neutral-900/90 px-4 py-3 rounded-t-xl">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5">
+                    <div className="h-3 w-3 rounded-full bg-rose-500/80" />
+                    <div className="h-3 w-3 rounded-full bg-amber-500/80" />
+                    <div className="h-3 w-3 rounded-full bg-emerald-500/80" />
+                  </div>
+                  <span className="ml-2 font-mono text-xs text-neutral-400 flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-emerald-400" /> auth.controller.ts
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <Zap className="h-2.5 w-2.5" /> AI SCAN ACTIVE
+                  </span>
+                </div>
+              </div>
+
+              {/* Code Diff Simulation View */}
+              <div className="p-4 font-mono text-xs space-y-1.5 overflow-hidden bg-neutral-950/90 rounded-b-xl leading-relaxed select-none">
+                <div className="text-neutral-400 text-[11px] pb-1">@@ -14,7 +14,9 @@ async function authenticateUser()</div>
+
+                <div className="text-neutral-400 px-2"> const token = req.headers.authorization;</div>
+                <div className="bg-rose-950/40 text-rose-300 border-l-2 border-rose-500 px-2 py-0.5 rounded-r">
+                  {"- const user = await db.query(`SELECT * FROM users WHERE id = '${req.params.id}'`);"}
+                </div>
+
+                <div className="bg-emerald-950/40 text-emerald-300 border-l-2 border-emerald-500 px-2 py-0.5 rounded-r">
+                  + const user = await User.findById(req.params.id).select(&#39;-password&#39;);
+                </div>
+
+                {/* Floating 3D AI Comment Card 1 (Security) */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3, duration: 0.5 }}
+                  className="my-2.5 rounded-xl border border-rose-500/40 bg-rose-950/30 p-3 text-rose-200 shadow-xl backdrop-blur-md font-sans"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-400 border border-rose-500/30">
+                        SECURITY
+                      </span>
+                      <span className="text-[10px] font-mono text-neutral-400">Line 15</span>
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                        <Sparkles className="h-2.5 w-2.5" /> Gemini
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> Resolved
                     </span>
-                  </button>
-                );
-              })}
-              <div className="absolute bottom-[7%] left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-neutral-950/85 px-4 py-2 text-[11px] text-neutral-300 shadow-xl [transform:translateZ(42px)]"><Boxes className="h-3.5 w-3.5 text-cyan-300" />Drag your attention across the system</div>
-              <div className="absolute right-[9%] top-[8%] flex items-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[10px] font-bold text-emerald-200 [transform:translateZ(58px)]"><Sparkles className="h-3.5 w-3.5" />LIVE CONTEXT</div>
-            </div>
-          </div>
-        </div>
+                  </div>
+                  <p className="text-xs text-neutral-200 leading-normal">
+                    SQL injection vulnerability fixed by switching to parameterized Mongoose query.
+                  </p>
+                </motion.div>
 
-        <div id="workflow" className="mt-16 grid gap-3 border-t border-white/10 pt-6 sm:grid-cols-3">
-          {['Connect a repository', 'Review the meaningful changes', 'Resolve with context'].map((item, index) => (
-            <div key={item} className="flex items-center gap-4 rounded-2xl border border-white/[.07] bg-white/[.025] p-4"><span className="font-mono text-xs text-violet-300">0{index + 1}</span><span className="text-sm font-semibold text-neutral-200">{item}</span><Code2 className="ml-auto h-4 w-4 text-neutral-600" /></div>
-          ))}
+                <div className="text-neutral-400 px-2"> if (!user) return res.status(404).send();</div>
+                <div className="bg-emerald-950/40 text-emerald-300 border-l-2 border-emerald-500 px-2 py-0.5 rounded-r">
+                  {'+ return res.status(200).json({ success: true, user });'}
+                </div>
+
+                {/* Floating 3D AI Comment Card 2 (Performance) */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6, duration: 0.5 }}
+                  className="my-2.5 rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-amber-200 shadow-xl backdrop-blur-md font-sans"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/30">
+                      BUG / RELIABILITY
+                    </span>
+                    <span className="text-[10px] font-mono text-neutral-400">Line 18</span>
+                  </div>
+                  <p className="text-xs text-neutral-200 leading-normal">
+                    Added password omission to prevent sensitive credential leakage in API response.
+                  </p>
+                </motion.div>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </div>
     </section>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FileDiff, PullRequest } from '@/lib/api';
 import { PersistedComment, PersistedReview } from '@/lib/review-api';
 import { useReviewSocket } from '@/hooks/useReviewSocket';
@@ -22,6 +23,7 @@ import {
   Info,
   ThumbsUp,
   CheckCircle2,
+  Zap,
 } from 'lucide-react';
 
 interface DiffViewerProps {
@@ -70,25 +72,28 @@ function CommentCardInline({
   const hasUpvoted = currentUserId ? comment.upvotes.includes(currentUserId) : false;
 
   return (
-    <div
-      className={`my-1.5 mx-3 rounded-xl p-3 border text-xs font-sans shadow-md transition-all duration-200 animate-in fade-in slide-in-from-left-2 ${
+    <motion.div
+      initial={{ opacity: 0, x: -12, scale: 0.98 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+      className={`my-2 mx-3 rounded-xl p-3 border text-xs font-sans shadow-lg transition-all duration-200 backdrop-blur-md ${
         comment.resolved
           ? 'bg-neutral-900/40 border-neutral-800 text-neutral-400 opacity-75'
           : comment.severity === 'security'
-          ? 'bg-rose-950/30 border-rose-500/40 text-rose-200'
+          ? 'bg-rose-950/40 border-rose-500/50 text-rose-200 shadow-rose-950/20'
           : comment.severity === 'bug'
-          ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+          ? 'bg-amber-950/40 border-amber-500/50 text-amber-200 shadow-amber-950/20'
           : comment.severity === 'smell'
-          ? 'bg-yellow-950/30 border-yellow-500/40 text-yellow-200'
-          : 'bg-sky-950/30 border-sky-500/40 text-sky-200'
+          ? 'bg-yellow-950/40 border-yellow-500/50 text-yellow-200 shadow-yellow-950/20'
+          : 'bg-sky-950/40 border-sky-500/50 text-sky-200 shadow-sky-950/20'
       }`}
     >
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-2">
           <Badge variant={comment.severity}>{SEVERITY_LABEL[comment.severity]}</Badge>
           <span className="text-[11px] font-mono text-neutral-400">Line {comment.lineNumber}</span>
-          <span className="text-[10px] text-emerald-400/80 flex items-center gap-1">
-            <Sparkles className="h-3 w-3" /> Gemini AI
+          <span className="text-[10px] text-emerald-400/90 flex items-center gap-1 font-mono">
+            <Sparkles className="h-3 w-3" /> Gemini 2.0
           </span>
         </div>
         {comment.resolved && (
@@ -100,15 +105,15 @@ function CommentCardInline({
 
       <div className="flex items-start gap-2.5 mt-1">
         <Icon className="h-4 w-4 shrink-0 mt-0.5" />
-        <p className="flex-1 leading-relaxed text-xs">{comment.message}</p>
+        <p className="flex-1 leading-relaxed text-xs text-neutral-100">{comment.message}</p>
       </div>
 
       <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px]">
         <button
           onClick={() => onUpvote?.(comment._id)}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all ${
             hasUpvoted
-              ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30'
+              ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40 shadow-sm shadow-emerald-500/10'
               : 'text-neutral-400 hover:text-emerald-300 hover:bg-neutral-800/60'
           }`}
         >
@@ -118,16 +123,16 @@ function CommentCardInline({
 
         <button
           onClick={() => onResolve?.(comment._id)}
-          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
             comment.resolved
               ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-              : 'bg-neutral-800 hover:bg-emerald-600 hover:text-white text-neutral-200'
+              : 'bg-neutral-800 hover:bg-emerald-600 hover:text-white text-neutral-200 shadow-sm'
           }`}
         >
           {comment.resolved ? 'Reopen Issue' : 'Mark as Resolved'}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -226,17 +231,32 @@ export function DiffViewer({
   const diffLines = parsePatch(selectedFile?.patch);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 lg:p-8 animate-in fade-in duration-200">
-      <div className="flex flex-col h-full max-h-[92vh] w-full max-w-6xl rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 lg:p-8">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 15 }}
+        transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+        className="flex flex-col h-full max-h-[92vh] w-full max-w-6xl rounded-2xl border border-neutral-800 bg-neutral-950/95 shadow-[0_25px_80px_rgba(0,0,0,0.9)] overflow-hidden relative"
+      >
+        {/* Animated Laser Scanning Line during review */}
+        {(isStreaming || isReviewing) && (
+          <motion.div
+            animate={{ y: ['0%', '100%', '0%'] }}
+            transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+            className="pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_rgba(52,211,153,0.9)] z-40"
+          />
+        )}
+
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900/90 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900/90 px-6 py-4 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-sm">
               <GitPullRequest className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-semibold text-emerald-400">#{pr.number}</span>
+                <span className="font-mono text-xs font-bold text-emerald-400">#{pr.number}</span>
                 <h2 className="text-sm font-bold text-white truncate max-w-md">{pr.title}</h2>
               </div>
               <div className="flex items-center gap-3 text-xs text-neutral-400 font-mono mt-0.5">
@@ -244,7 +264,7 @@ export function DiffViewer({
                 <span className="text-emerald-400">+{totalAdditions}</span>
                 <span className="text-rose-400">-{totalDeletions}</span>
                 {localComments.length > 0 && (
-                  <span className="text-amber-400 font-sans flex items-center gap-1">
+                  <span className="text-amber-400 font-sans flex items-center gap-1 font-semibold">
                     <Sparkles className="h-3 w-3" />
                     {localComments.length} AI issues
                   </span>
@@ -258,14 +278,14 @@ export function DiffViewer({
             <PresenceIndicator users={activeUsers} currentUserId={userId} />
 
             {isStreaming || isReviewing ? (
-              <div className="flex items-center gap-2 rounded-xl bg-neutral-800/80 px-3 py-1.5 text-xs text-emerald-400 font-mono">
-                <Loader2 className="h-4 w-4 animate-spin" />
+              <div className="flex items-center gap-2 rounded-xl bg-neutral-800/80 border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-400 font-mono shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
                 <span>
                   Streaming… {progress ? `(${progress.filesReviewed}/${progress.totalFiles || files.length} files)` : ''}
                 </span>
               </div>
             ) : currentReview || localComments.length > 0 ? (
-              <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium">
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
                 <Check className="h-4 w-4" />
                 Review complete ({localComments.length} issues)
               </div>
@@ -273,7 +293,7 @@ export function DiffViewer({
               <Button
                 onClick={onStartReview}
                 size="sm"
-                className="gap-2 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-semibold text-xs"
+                className="gap-2 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-neutral-950 font-bold text-xs shadow-md shadow-emerald-500/20"
               >
                 <Sparkles className="h-4 w-4" />
                 Start Live AI Review
@@ -294,8 +314,8 @@ export function DiffViewer({
         <div className="flex flex-1 overflow-hidden divide-x divide-neutral-800/80">
           {/* File Sidebar */}
           <div className="w-72 bg-neutral-900/30 flex flex-col overflow-y-auto p-3 space-y-1">
-            <div className="px-3 py-2 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5" />
+            <div className="px-3 py-2 text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-emerald-400" />
               <span>Changed Files ({files.length})</span>
             </div>
 
@@ -317,7 +337,7 @@ export function DiffViewer({
                     onClick={() => setSelectedFileIndex(idx)}
                     className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-all ${
                       isSelected
-                        ? 'bg-neutral-800 text-white font-medium shadow-sm'
+                        ? 'bg-neutral-800 text-white font-semibold shadow-md border border-neutral-700'
                         : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200'
                     }`}
                   >
@@ -327,12 +347,12 @@ export function DiffViewer({
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       {hasIssues && (
-                        <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/20 animate-pulse">
+                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/30 animate-pulse">
                           {fileComments.length}
                         </span>
                       )}
                       <span className="text-[10px] font-mono text-emerald-400">+{file.additions}</span>
-                      <ChevronRight className="h-3 w-3 text-neutral-400" />
+                      <ChevronRight className="h-3 w-3 text-neutral-500" />
                     </div>
                   </button>
                 );
@@ -341,23 +361,23 @@ export function DiffViewer({
           </div>
 
           {/* Diff Content Viewer */}
-          <div className="flex-1 flex flex-col bg-neutral-950 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-neutral-950 overflow-hidden relative">
             {selectedFile ? (
               <>
                 {/* File Header */}
                 <div className="px-6 py-3 border-b border-neutral-800/60 bg-neutral-900/40 flex items-center justify-between text-xs font-mono">
                   <div className="flex items-center gap-2 text-neutral-300">
-                    <span className="font-semibold text-white">{selectedFile.filename}</span>
-                    <span className="text-neutral-400">({selectedFile.status})</span>
+                    <span className="font-bold text-white">{selectedFile.filename}</span>
+                    <span className="text-neutral-500">({selectedFile.status})</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-emerald-400">+{selectedFile.additions}</span>
-                    <span className="text-rose-400">-{selectedFile.deletions}</span>
+                    <span className="text-emerald-400 font-semibold">+{selectedFile.additions}</span>
+                    <span className="text-rose-400 font-semibold">-{selectedFile.deletions}</span>
                   </div>
                 </div>
 
                 {/* Code Diff Body */}
-                <div className="flex-1 overflow-auto font-mono text-xs leading-relaxed select-text">
+                <div className="flex-1 overflow-auto font-mono text-xs leading-relaxed select-text p-1">
                   {diffLines.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center text-neutral-400 p-8">
                       <Check className="h-8 w-8 text-emerald-400 mb-2 opacity-60" />
@@ -387,7 +407,8 @@ export function DiffViewer({
                                 {line.content}
                               </span>
                             </div>
-                            {/* Inline AI comments with live Socket sync */}
+
+                            {/* Inline AI comments with live Socket sync and spring entrance */}
                             {inlineComments.map((comment) => (
                               <CommentCardInline
                                 key={comment._id}
@@ -411,7 +432,7 @@ export function DiffViewer({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
