@@ -54,6 +54,7 @@ export async function triggerReview(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -67,6 +68,7 @@ export async function triggerReview(
 export async function fetchReview(token: string, reviewId: string): Promise<ReviewWithComments> {
   const res = await fetch(`${API_URL}/review/${reviewId}`, {
     headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -85,6 +87,7 @@ export async function fetchReviewByPr(
 ): Promise<ReviewWithComments> {
   const res = await fetch(`${API_URL}/review/pr/${owner}/${repo}/${pullNumber}`, {
     headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -102,6 +105,7 @@ export async function resolveComment(
   const res = await fetch(`${API_URL}/comments/${commentId}/resolve`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -119,6 +123,7 @@ export async function upvoteComment(
   const res = await fetch(`${API_URL}/comments/${commentId}/upvote`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
   });
 
   if (!res.ok) {

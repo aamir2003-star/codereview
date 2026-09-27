@@ -66,6 +66,7 @@ export async function fetchRepos(token: string): Promise<Repository[]> {
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -86,6 +87,7 @@ export async function fetchPullRequests(
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -107,6 +109,7 @@ export async function fetchPullRequestDiff(
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    cache: 'no-store',
   });
 
   if (!res.ok) {

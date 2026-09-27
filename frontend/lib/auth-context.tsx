@@ -36,7 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch(`${API_URL}/auth/me`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
+          'Cache-Control': 'no-cache',
         },
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('auth_token', authToken);
         return true;
       } else {
+        console.warn('[AuthProvider] /auth/me returned non-ok status:', response.status);
         localStorage.removeItem('auth_token');
         setUser(null);
         setToken(null);

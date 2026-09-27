@@ -1,101 +1,161 @@
 'use client';
 
 import React from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Cpu, Users, ShieldCheck, Zap, GitBranch, RefreshCw } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Card3D } from '@/components/ui/Card3D';
+import { Cpu, Users, ShieldCheck, Zap, GitBranch, RefreshCw, Sparkles } from 'lucide-react';
 
 const features = [
   {
     icon: Cpu,
-    title: 'Progressive Per-File Streaming',
+    title: 'Progressive File-by-File Streaming',
     description:
-      'Instead of blocking for minutes on entire repositories, Gemini analyzes diff hunks file-by-file and streams comments directly to your screen.',
-    badge: 'Gemini 2.0',
+      'Instead of blocking for minutes on entire repositories, Gemini analyzes diff hunks file-by-file and streams comments directly to your screen in real time.',
+    badge: 'Gemini 2.0 AI',
+    gradient: 'from-emerald-500/20 to-cyan-500/5',
   },
   {
     icon: Users,
-    title: 'Multiplayer Real-Time Rooms',
+    title: 'Multiplayer Real-Time Review Rooms',
     description:
-      'Engineers can view the same PR simultaneously. Comments appear live, and teammates can upvote or resolve issues with zero page refresh.',
-    badge: 'Socket.io',
+      'Teammates can view the same PR simultaneously. Comments stream live, and reviewers can upvote or resolve issues with zero page refresh.',
+    badge: 'Socket.io Sync',
+    gradient: 'from-cyan-500/20 to-blue-500/5',
   },
   {
     icon: ShieldCheck,
-    title: 'Categorized Severity Triage',
+    title: '4-Tier Categorized Severity Triage',
     description:
-      'Identifies critical vulnerabilities, logical runtime bugs, code smells, and styling nits with color-coded badges and line gutter markers.',
-    badge: 'Categorized',
+      'Identifies critical security vulnerabilities, logical bugs, maintainability code smells, and styling nits with color-coded line markers.',
+    badge: 'Security + Lint',
+    gradient: 'from-rose-500/20 to-amber-500/5',
   },
   {
     icon: GitBranch,
-    title: 'One-Click GitHub Integration',
+    title: 'Direct GitHub OAuth Integration',
     description:
-      'Directly connect your GitHub account via OAuth to list repositories and pull requests with zero configuration overhead.',
+      'Connect your GitHub repositories in seconds. Pull requests, branches, and unified diff patches are synced with zero configuration overhead.',
     badge: 'GitHub OAuth',
+    gradient: 'from-violet-500/20 to-purple-500/5',
   },
   {
     icon: Zap,
-    title: 'Optimistic UI Updates',
+    title: 'Optimistic UI & Low Latency',
     description:
-      'Instant feedback when resolving comments or voting on suggestions, backed by immediate server reconciliation.',
-    badge: 'Low Latency',
+      'Instant interactive feedback when resolving comments or voting on suggestions, backed by immediate server reconciliation.',
+    badge: 'Sub-second',
+    gradient: 'from-amber-500/20 to-emerald-500/5',
   },
   {
     icon: RefreshCw,
-    title: 'Full Review Persistence',
+    title: 'MongoDB Review Persistence',
     description:
-      'MongoDB stores all historical review sessions and comment resolutions so you can revisit past reviews at any time.',
-    badge: 'MongoDB',
+      'All review sessions, resolutions, and collaborator upvotes are safely persisted in MongoDB so you can revisit past audits at any time.',
+    badge: 'MongoDB Atlas',
+    gradient: 'from-teal-500/20 to-emerald-500/5',
   },
 ];
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.12,
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: 'easeOut' as const },
+  },
+};
+
 export function FeatureScroll() {
   return (
-    <section id="features" className="py-20 md:py-32 border-t border-neutral-900 bg-neutral-950/60 relative">
+    <section id="features" className="py-20 md:py-32 border-t border-neutral-800/60 bg-neutral-950/40 relative">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-emerald-400 mb-2">
-            Why ReviewCopilot
-          </h2>
-          <p className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Built for modern engineering teams who value velocity and code quality
-          </p>
-          <p className="mt-4 text-sm text-neutral-400">
-            Everything you need to turn slow, asynchronous code reviews into fast, collaborative sessions.
-          </p>
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 mb-4"
+          >
+            <Sparkles className="h-3 w-3" />
+            <span>Architecture &amp; Capabilities</span>
+          </motion.div>
+
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl"
+          >
+            Engineered for high-velocity software teams
+          </motion.h2>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="mt-4 text-base text-neutral-400"
+          >
+            Everything you need to turn slow, asynchronous code reviews into fast, intelligent collaborative reviews.
+          </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-60px' }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
           {features.map((feature, index) => {
             const Icon = feature.icon;
             return (
-              <Card
-                key={index}
-                className="group hover:border-neutral-700/80 hover:bg-neutral-900/60 transition-all duration-300 relative overflow-hidden"
-              >
-                <div className="absolute top-0 right-0 h-24 w-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors" />
-                <CardHeader>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 group-hover:scale-110 transition-transform">
-                      <Icon className="h-5 w-5" />
+              <motion.div key={index} variants={cardVariants}>
+                <Card3D depth={10} className="h-full bg-neutral-900/60 border border-neutral-800 p-6 flex flex-col justify-between backdrop-blur-xl group">
+                  {/* Subtle Background Radial Gradient */}
+                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 group-hover:scale-110 group-hover:bg-emerald-500/20 transition-all duration-300 shadow-md shadow-emerald-500/10">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <span className="text-[10px] font-mono font-semibold text-neutral-400 bg-neutral-800/80 px-2.5 py-1 rounded-full border border-neutral-700/60">
+                        {feature.badge}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono text-neutral-400 bg-neutral-800/60 px-2 py-0.5 rounded-full border border-neutral-700/50">
-                      {feature.badge}
+
+                    <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">
+                      {feature.title}
+                    </h3>
+
+                    <p className="mt-2.5 text-xs text-neutral-400 leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </div>
+
+                  <div className="relative z-10 mt-6 pt-4 border-t border-neutral-800/60 flex items-center justify-between text-[11px] text-neutral-500 font-mono">
+                    <span>Feature 0{index + 1}</span>
+                    <span className="text-emerald-400/80 flex items-center gap-1 group-hover:text-emerald-300 transition-colors">
+                      Explore &rarr;
                     </span>
                   </div>
-                  <CardTitle className="text-lg font-semibold text-white group-hover:text-emerald-300 transition-colors">
-                    {feature.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-xs text-neutral-400 leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
+                </Card3D>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       </div>
     </section>
   );
