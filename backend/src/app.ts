@@ -11,6 +11,9 @@ import commentRoutes from './routes/comment.routes';
 
 const app = express();
 
+// Disable ETag generation to prevent 304 Not Modified responses on dynamic JSON APIs
+app.set('etag', false);
+
 // Disable Helmet's Cross-Origin-Resource-Policy restriction so frontend on port 3000 can call backend on port 5001
 app.use(
   helmet({
@@ -42,9 +45,17 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cache-Control', 'Pragma'],
   })
 );
+
+// Always send fresh responses for API calls — prevent 304 caching
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 app.use(morgan('dev'));
 app.use(express.json({ limit: '1mb' }));
