@@ -24,6 +24,7 @@ import {
   ThumbsUp,
   CheckCircle2,
   Zap,
+  RotateCw,
 } from 'lucide-react';
 
 interface DiffViewerProps {
@@ -285,9 +286,19 @@ export function DiffViewer({
                 </span>
               </div>
             ) : currentReview || localComments.length > 0 ? (
-              <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
-                <Check className="h-4 w-4" />
-                Review complete ({localComments.length} issues)
+              <div className="flex items-center gap-2.5">
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                  <Check className="h-4 w-4" />
+                  Review complete ({localComments.length} issue{localComments.length === 1 ? '' : 's'})
+                </div>
+                <Button
+                  onClick={onStartReview}
+                  size="sm"
+                  className="gap-2 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 font-bold text-xs border border-emerald-500/40 hover:border-emerald-400 shadow-sm transition-all"
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                  <span>AI Review Again</span>
+                </Button>
               </div>
             ) : (
               <Button
