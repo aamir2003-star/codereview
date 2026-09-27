@@ -26,9 +26,9 @@ You MUST respond strictly with a valid JSON array of objects.
 Schema:
 [
   {
-    "line": 28,
+    "line": 1,
     "severity": "bug" | "security" | "smell" | "nit",
-    "message": "Potential out of bounds array access when sampleItems is empty."
+    "message": "Description of issue"
   }
 ]
 
@@ -54,8 +54,15 @@ export const geminiService = {
 
     const userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${patch}\n\`\`\``;
 
-    // Try primary model (gemini-2.5-flash / gemini-2.0-flash)
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    // Active supported Gemini models in order of preference
+    const modelsToTry = [
+      'gemini-3.7-flash',
+      'gemini-3.5-flash',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+      'gemini-2.5-flash',
+    ];
+
     let rawResponse = '';
     let lastError: unknown = null;
 
@@ -74,11 +81,12 @@ export const geminiService = {
 
         rawResponse = response.text ?? '';
         if (rawResponse) {
+          console.log(`[Gemini] Successfully reviewed ${filename} using ${model}`);
           break; // Successfully got response
         }
       } catch (err) {
         lastError = err;
-        console.warn(`[Gemini] Model ${model} failed, attempting next model... Error:`, (err as Error).message);
+        console.warn(`[Gemini] Model ${model} failed for ${filename}, attempting next model... Error:`, (err as Error).message);
       }
     }
 
