@@ -44,7 +44,9 @@ interface DiffViewerProps {
   onResolve?: (commentId: string) => void;
   onUpvote?: (commentId: string) => void;
   userId?: string;
-  onCommentsUpdated?: (comments: PersistedComment[]) => void;
+  onNewComment?: (comment: PersistedComment) => void;
+  onCommentResolved?: (data: { commentId: string; resolved: boolean }) => void;
+  onCommentUpvoted?: (data: { commentId: string; upvotes: string[] }) => void;
 }
 
 const SEVERITY_ICONS = {
@@ -185,7 +187,7 @@ export function DiffViewer({
   isLoading,
   reviewId,
   currentReview,
-  reviewComments: initialComments = [],
+  reviewComments = [],
   isReviewing,
   token,
   onClose,
@@ -194,40 +196,24 @@ export function DiffViewer({
   onResolve,
   onUpvote,
   userId,
-  onCommentsUpdated,
+  onNewComment,
+  onCommentResolved,
+  onCommentUpvoted,
 }: DiffViewerProps) {
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
-  const [localComments, setLocalComments] = useState<PersistedComment[]>(initialComments);
-
-  useEffect(() => {
-    setLocalComments(initialComments);
-  }, [initialComments]);
 
   // Socket.io Real-Time Streaming Hook
   const { activeUsers, progress, isStreaming } = useReviewSocket({
     reviewId: reviewId ?? null,
     token,
     onNewComment: (newComment) => {
-      setLocalComments((prev) => {
-        if (prev.some((c) => c._id === newComment._id)) return prev;
-        const updated = [...prev, newComment];
-        onCommentsUpdated?.(updated);
-        return updated;
-      });
+      onNewComment?.(newComment);
     },
-    onCommentResolved: ({ commentId, resolved }) => {
-      setLocalComments((prev) => {
-        const updated = prev.map((c) => (c._id === commentId ? { ...c, resolved } : c));
-        onCommentsUpdated?.(updated);
-        return updated;
-      });
+    onCommentResolved: (data) => {
+      onCommentResolved?.(data);
     },
-    onCommentUpvoted: ({ commentId, upvotes }) => {
-      setLocalComments((prev) => {
-        const updated = prev.map((c) => (c._id === commentId ? { ...c, upvotes } : c));
-        onCommentsUpdated?.(updated);
-        return updated;
-      });
+    onCommentUpvoted: (data) => {
+      onCommentUpvoted?.(data);
     },
   });
 
@@ -236,7 +222,7 @@ export function DiffViewer({
   const totalDeletions = files.reduce((acc, f) => acc + f.deletions, 0);
 
   // Map comments for the currently selected file
-  const currentComments = localComments.filter(
+  const currentComments = reviewComments.filter(
     (c) => c.filePath === selectedFile?.filename
   );
 
@@ -307,10 +293,10 @@ export function DiffViewer({
                 <span>{files.length} files</span>
                 <span className="text-emerald-400">+{totalAdditions}</span>
                 <span className="text-rose-400">-{totalDeletions}</span>
-                {localComments.length > 0 && (
+                {reviewComments.length > 0 && (
                   <span className="text-amber-400 font-sans flex items-center gap-1 font-semibold">
                     <Sparkles className="h-3 w-3" />
-                    {localComments.length} AI issues
+                    {reviewComments.length} AI issues
                   </span>
                 )}
               </div>
@@ -360,11 +346,11 @@ export function DiffViewer({
                   </Button>
                 )}
               </div>
-            ) : currentReview || localComments.length > 0 ? (
+            ) : currentReview || reviewComments.length > 0 ? (
               <div className="flex items-center gap-2.5">
                 <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
                   <Check className="h-4 w-4" />
-                  Review complete ({localComments.length} issue{localComments.length === 1 ? '' : 's'})
+                  Review complete ({reviewComments.length} issue{reviewComments.length === 1 ? '' : 's'})
                 </div>
                 <Button
                   onClick={onStartReview}
@@ -414,7 +400,7 @@ export function DiffViewer({
             ) : (
               files.map((file, idx) => {
                 const isSelected = selectedFileIndex === idx;
-                const fileComments = localComments.filter((c) => c.filePath === file.filename);
+                const fileComments = reviewComments.filter((c) => c.filePath === file.filename);
                 const hasIssues = fileComments.length > 0;
 
                 return (

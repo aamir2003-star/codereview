@@ -236,6 +236,26 @@ export default function DashboardPage() {
     }
   };
 
+  // Real-time socket comment event handlers
+  const handleNewComment = useCallback((newComment: PersistedComment) => {
+    setReviewComments((prev) => {
+      if (prev.some((c) => c._id === newComment._id)) return prev;
+      return [...prev, newComment];
+    });
+  }, []);
+
+  const handleCommentResolved = useCallback(({ commentId, resolved }: { commentId: string; resolved: boolean }) => {
+    setReviewComments((prev) =>
+      prev.map((c) => (c._id === commentId ? { ...c, resolved } : c))
+    );
+  }, []);
+
+  const handleCommentUpvoted = useCallback(({ commentId, upvotes }: { commentId: string; upvotes: string[] }) => {
+    setReviewComments((prev) =>
+      prev.map((c) => (c._id === commentId ? { ...c, upvotes } : c))
+    );
+  }, []);
+
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-neutral-950">
@@ -352,7 +372,9 @@ export default function DashboardPage() {
           onResolve={handleResolve}
           onUpvote={handleUpvote}
           userId={user?._id}
-          onCommentsUpdated={setReviewComments}
+          onNewComment={handleNewComment}
+          onCommentResolved={handleCommentResolved}
+          onCommentUpvoted={handleCommentUpvoted}
         />
       )}
     </div>
