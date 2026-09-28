@@ -13,6 +13,9 @@ router.post('/', reviewController.triggerReview);
 // Fetch a review + its comments by review ID
 router.get('/:id', reviewController.getReview);
 
+// Stop/cancel an active review by review ID
+router.post('/:id/stop', reviewController.stopReview);
+
 // Check if a review exists for a specific PR
 router.get('/pr/:owner/:repo/:pullNumber', reviewController.getReviewByPr);
 

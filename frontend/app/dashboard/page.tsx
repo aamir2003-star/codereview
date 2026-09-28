@@ -23,6 +23,7 @@ import {
   fetchReviewByPr,
   resolveComment,
   upvoteComment,
+  stopReview,
 } from '@/lib/review-api';
 import { ReviewSummaryCard } from '@/components/dashboard/ReviewSummaryCard';
 import { Button } from '@/components/ui/button';
@@ -175,6 +176,19 @@ export default function DashboardPage() {
       pollReview(newId);
     } catch (err) {
       console.error('Start review error:', err);
+      setIsReviewing(false);
+    }
+  };
+
+  // Stop an ongoing AI review
+  const handleStopReview = async () => {
+    if (!token || !reviewId) return;
+    try {
+      await stopReview(token, reviewId);
+    } catch (err) {
+      console.error('Stop review error:', err);
+    } finally {
+      stopPolling();
       setIsReviewing(false);
     }
   };
@@ -334,6 +348,7 @@ export default function DashboardPage() {
             setReviewId(null);
           }}
           onStartReview={handleStartReview}
+          onStopReview={handleStopReview}
           onResolve={handleResolve}
           onUpvote={handleUpvote}
           userId={user?._id}

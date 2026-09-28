@@ -17,30 +17,8 @@ async function getUserAccessToken(userId: string): Promise<string> {
   return decrypt(user.accessToken);
 }
 
-async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
-  const results: T[] = [];
-  const executing: Promise<void>[] = [];
-
-  for (const task of tasks) {
-    const p = Promise.resolve().then(async () => {
-      const res = await task();
-      results.push(res);
-    });
-
-    const e: Promise<void> = p.then(() => {
-      executing.splice(executing.indexOf(e), 1);
-    });
-
-    executing.push(e);
-
-    if (executing.length >= limit) {
-      await Promise.race(executing);
-    }
-  }
-
-  await Promise.all(executing);
-  return results;
-}
+// Track active review jobs so user can cancel/stop them on demand
+const activeReviewAborts = new Map<string, boolean>();
 
 const IGNORED_EXTENSIONS = [
   '.lock',
@@ -102,13 +80,16 @@ export const reviewController = {
     });
 
     const reviewId = review._id.toString();
+    activeReviewAborts.set(reviewId, false);
+
     const io = getIO();
 
     // Return reviewId immediately so client joins socket room `review:{reviewId}`
     res.status(202).json({ reviewId, status: 'pending' });
 
-    // Asynchronous streaming worker
+    // Asynchronous review worker
     (async () => {
+      const startTime = Date.now();
       try {
         const accessToken = await getUserAccessToken(req.user!.userId);
 
@@ -116,12 +97,14 @@ export const reviewController = {
         io?.to(`review:${reviewId}`).emit('review:status', { reviewId, status: 'streaming' });
 
         const files = await githubService.getPullRequestFiles(accessToken, owner, repo, pullNumber);
-        
+
         // Filter out non-reviewable assets / lockfiles
         const reviewableFiles = files.filter((f) => isReviewableFile(f.filename) && f.patch);
         const filesToReview = reviewableFiles.length > 0 ? reviewableFiles.slice(0, 10) : files.slice(0, 10);
 
         await Review.findByIdAndUpdate(review._id, { totalFiles: filesToReview.length });
+
+        console.log(`[Review] Starting review for ${owner}/${repo} #${pullNumber} (${filesToReview.length} files to review)`);
 
         // Emit initial progress starting point
         io?.to(`review:${reviewId}`).emit('review:progress', {
@@ -129,30 +112,40 @@ export const reviewController = {
           filesReviewed: 0,
           totalFiles: filesToReview.length,
           percent: 10,
-          currentFile: filesToReview[0]?.filename || 'Initializing diff...',
+          currentFile: filesToReview[0]?.filename || 'Starting analyzer...',
           totalComments: 0,
         });
 
         let totalComments = 0;
         let filesReviewedCount = 0;
 
-        const tasks = filesToReview.map((file) => async () => {
+        // Process files sequentially for instant, rock-solid execution
+        for (let i = 0; i < filesToReview.length; i++) {
+          // Check if user requested to stop/cancel review
+          if (activeReviewAborts.get(reviewId)) {
+            console.log(`[Review] Review #${reviewId} was stopped by user.`);
+            break;
+          }
+
+          const file = filesToReview[i];
+          const currentFilePercent = Math.min(95, Math.round(((i + 1) / filesToReview.length) * 100));
+
+          io?.to(`review:${reviewId}`).emit('review:progress', {
+            reviewId,
+            filesReviewed: filesReviewedCount,
+            totalFiles: filesToReview.length,
+            percent: Math.max(15, Math.round((i / filesToReview.length) * 100)),
+            currentFile: file.filename,
+            totalComments,
+          });
+
           if (!file.patch) {
             filesReviewedCount++;
-            const percent = Math.min(100, Math.round((filesReviewedCount / filesToReview.length) * 100));
-            io?.to(`review:${reviewId}`).emit('review:progress', {
-              reviewId,
-              filesReviewed: filesReviewedCount,
-              totalFiles: filesToReview.length,
-              percent,
-              currentFile: file.filename,
-              totalComments,
-            });
-            return;
+            continue;
           }
 
           try {
-            console.log(`[Review] Analyzing file: ${file.filename} (Patch length: ${file.patch.length} chars)`);
+            console.log(`[Review] Analyzing file [${i + 1}/${filesToReview.length}]: ${file.filename} (${file.patch.length} chars)`);
             const comments = await geminiService.reviewFileDiff(file.filename, file.patch);
 
             if (comments.length > 0) {
@@ -167,6 +160,7 @@ export const reviewController = {
               );
 
               totalComments += docs.length;
+              console.log(`[Review] Found ${docs.length} issues in ${file.filename}`);
 
               // Stream new comments to all reviewers in this room
               for (const doc of docs) {
@@ -177,7 +171,7 @@ export const reviewController = {
               }
             }
           } catch (err) {
-            console.error(`[Review] Gemini error on ${file.filename}:`, err instanceof Error ? err.message : err);
+            console.error(`[Review] Error analyzing ${file.filename}:`, err instanceof Error ? err.message : err);
             io?.to(`review:${reviewId}`).emit('file:error', {
               reviewId,
               filename: file.filename,
@@ -186,13 +180,15 @@ export const reviewController = {
           }
 
           filesReviewedCount++;
-          const percent = Math.min(100, Math.round((filesReviewedCount / filesToReview.length) * 100));
 
           await Review.updateOne(
             { _id: review._id },
             {
-              $inc: { filesReviewed: 1 },
-              $set: { updatedAt: new Date() },
+              $set: {
+                filesReviewed: filesReviewedCount,
+                totalComments,
+                updatedAt: new Date(),
+              },
             }
           );
 
@@ -200,25 +196,25 @@ export const reviewController = {
             reviewId,
             filesReviewed: filesReviewedCount,
             totalFiles: filesToReview.length,
-            percent,
+            percent: currentFilePercent,
             currentFile: file.filename,
             totalComments,
           });
-        });
-
-        // Run files with concurrency of 2 for fast, stable rate-limits
-        await runWithConcurrency(tasks, 2);
+        }
 
         // Review completed
+        const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Review] Completed review #${reviewId} in ${durationSec}s with ${totalComments} total comments.`);
+
         await Review.findByIdAndUpdate(review._id, {
           status: 'done',
           totalComments,
-          filesReviewed: filesToReview.length,
+          filesReviewed: filesReviewedCount,
         });
 
         io?.to(`review:${reviewId}`).emit('review:progress', {
           reviewId,
-          filesReviewed: filesToReview.length,
+          filesReviewed: filesReviewedCount,
           totalFiles: filesToReview.length,
           percent: 100,
           totalComments,
@@ -227,17 +223,56 @@ export const reviewController = {
         io?.to(`review:${reviewId}`).emit('review:complete', {
           reviewId,
           totalComments,
-          filesReviewed: filesToReview.length,
+          filesReviewed: filesReviewedCount,
         });
       } catch (err) {
         console.error('[Review] Processing failed:', err);
         await Review.findByIdAndUpdate(review._id, { status: 'error' });
         io?.to(`review:${reviewId}`).emit('review:error', {
           reviewId,
-          message: err instanceof Error ? err.message : 'Review process encountered a fatal error',
+          message: err instanceof Error ? err.message : 'Review process encountered an error',
         });
+      } finally {
+        activeReviewAborts.delete(reviewId);
       }
     })();
+  },
+
+  /**
+   * POST /review/:id/stop
+   * Stop/cancel a running review
+   */
+  async stopReview(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const reviewId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!reviewId || !mongoose.isValidObjectId(reviewId)) {
+      res.status(400).json({ error: 'Valid review ID is required' });
+      return;
+    }
+
+    try {
+      activeReviewAborts.set(reviewId, true);
+
+      const review = await Review.findByIdAndUpdate(
+        reviewId,
+        { status: 'done' },
+        { new: true }
+      );
+
+      const io = getIO();
+      io?.to(`review:${reviewId}`).emit('review:complete', {
+        reviewId,
+        totalComments: review?.totalComments || 0,
+        filesReviewed: review?.filesReviewed || 0,
+        stopped: true,
+      });
+
+      console.log(`[Review] Stopped review #${reviewId} on user request.`);
+      res.status(200).json({ success: true, message: 'Review stopped successfully', review });
+    } catch (err) {
+      console.error('[StopReview Error]:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   },
 
   /**

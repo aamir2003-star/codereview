@@ -79,6 +79,21 @@ export async function fetchReview(token: string, reviewId: string): Promise<Revi
   return res.json();
 }
 
+export async function stopReview(token: string, reviewId: string): Promise<{ success: boolean; review: PersistedReview }> {
+  const res = await fetch(`${API_URL}/review/${reviewId}/stop`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to stop review');
+  }
+
+  return res.json();
+}
+
 export async function fetchReviewByPr(
   token: string,
   owner: string,
