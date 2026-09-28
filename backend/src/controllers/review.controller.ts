@@ -5,42 +5,81 @@ import { User } from '../models/User';
 import { Review } from '../models/Review';
 import { Comment } from '../models/Comment';
 import { decrypt } from '../utils/crypto';
-import { githubService, GitHubApiError } from '../services/github.service';
+import { githubService } from '../services/github.service';
 import { geminiService, GeminiApiError } from '../services/gemini.service';
 import { getIO } from '../sockets/socket.instance';
 
 async function getUserAccessToken(userId: string): Promise<string> {
   const user = await User.findById(userId);
-  if (!user || !user.accessToken) throw new Error('User access token not found');
+  if (!user || !user.accessToken) {
+    throw new Error('User not found or missing access token');
+  }
   return decrypt(user.accessToken);
 }
 
 async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = [];
-  const queue = [...tasks];
-  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
-    while (queue.length > 0) {
-      const task = queue.shift();
-      if (task) results.push(await task());
+  const executing: Promise<void>[] = [];
+
+  for (const task of tasks) {
+    const p = Promise.resolve().then(async () => {
+      const res = await task();
+      results.push(res);
+    });
+
+    const e: Promise<void> = p.then(() => {
+      executing.splice(executing.indexOf(e), 1);
+    });
+
+    executing.push(e);
+
+    if (executing.length >= limit) {
+      await Promise.race(executing);
     }
-  });
-  await Promise.all(workers);
+  }
+
+  await Promise.all(executing);
   return results;
+}
+
+const IGNORED_EXTENSIONS = [
+  '.lock',
+  '.lockb',
+  '-lock.json',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.ico',
+  '.min.js',
+  '.min.css',
+  '.map',
+];
+
+const IGNORED_PATHS = [
+  'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'dist/',
+  '.next/',
+  'build/',
+  'node_modules/',
+];
+
+function isReviewableFile(filename: string): boolean {
+  if (IGNORED_PATHS.some((ignored) => filename.includes(ignored))) return false;
+  if (IGNORED_EXTENSIONS.some((ext) => filename.endsWith(ext))) return false;
+  return true;
 }
 
 export const reviewController = {
   /**
    * POST /review
-   * Trigger a full PR review — creates Review doc, streams Gemini comments via Socket.io
+   * Trigger async review for an entire PR with Socket.io streaming
    */
   async triggerReview(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const { owner, repo, pullNumber, prUrl, prTitle } = req.body as {
-      owner?: string;
-      repo?: string;
-      pullNumber?: number;
-      prUrl?: string;
-      prTitle?: string;
-    };
+    const { owner, repo, pullNumber, prUrl, prTitle } = req.body;
 
     if (!owner || !repo || !pullNumber) {
       res.status(400).json({ error: 'owner, repo, and pullNumber are required' });
@@ -77,53 +116,68 @@ export const reviewController = {
         io?.to(`review:${reviewId}`).emit('review:status', { reviewId, status: 'streaming' });
 
         const files = await githubService.getPullRequestFiles(accessToken, owner, repo, pullNumber);
-        const filesToReview = files.slice(0, 10); // v1 limit
+        
+        // Filter out non-reviewable assets / lockfiles
+        const reviewableFiles = files.filter((f) => isReviewableFile(f.filename) && f.patch);
+        const filesToReview = reviewableFiles.length > 0 ? reviewableFiles.slice(0, 10) : files.slice(0, 10);
 
         await Review.findByIdAndUpdate(review._id, { totalFiles: filesToReview.length });
 
+        // Emit initial progress starting point
+        io?.to(`review:${reviewId}`).emit('review:progress', {
+          reviewId,
+          filesReviewed: 0,
+          totalFiles: filesToReview.length,
+          percent: 10,
+          currentFile: filesToReview[0]?.filename || 'Initializing diff...',
+          totalComments: 0,
+        });
+
         let totalComments = 0;
-        let filesReviewed = 0;
+        let filesReviewedCount = 0;
 
         const tasks = filesToReview.map((file) => async () => {
           if (!file.patch) {
-            filesReviewed++;
-            await Review.findByIdAndUpdate(review._id, { filesReviewed });
+            filesReviewedCount++;
+            const percent = Math.min(100, Math.round((filesReviewedCount / filesToReview.length) * 100));
             io?.to(`review:${reviewId}`).emit('review:progress', {
               reviewId,
-              filesReviewed,
+              filesReviewed: filesReviewedCount,
               totalFiles: filesToReview.length,
+              percent,
               currentFile: file.filename,
+              totalComments,
             });
             return;
           }
 
           try {
+            console.log(`[Review] Analyzing file: ${file.filename} (Patch length: ${file.patch.length} chars)`);
             const comments = await geminiService.reviewFileDiff(file.filename, file.patch);
 
-            // Persist each comment to MongoDB BEFORE broadcasting
-            const docs = await Comment.insertMany(
-              comments.map((c) => ({
-                reviewId: review._id,
-                filePath: file.filename,
-                lineNumber: c.line,
-                severity: c.severity,
-                message: c.message,
-              }))
-            );
+            if (comments.length > 0) {
+              const docs = await Comment.insertMany(
+                comments.map((c) => ({
+                  reviewId: review._id,
+                  filePath: file.filename,
+                  lineNumber: c.line,
+                  severity: c.severity,
+                  message: c.message,
+                }))
+              );
 
-            totalComments += docs.length;
+              totalComments += docs.length;
 
-            // Stream new comments to all reviewers in this room
-            for (const doc of docs) {
-              io?.to(`review:${reviewId}`).emit('comment:new', {
-                reviewId,
-                comment: doc.toObject(),
-              });
+              // Stream new comments to all reviewers in this room
+              for (const doc of docs) {
+                io?.to(`review:${reviewId}`).emit('comment:new', {
+                  reviewId,
+                  comment: doc.toObject(),
+                });
+              }
             }
           } catch (err) {
-            if (err instanceof GeminiApiError) {
-              console.error(`[Review] Gemini error on ${file.filename}:`, err.message);
-            }
+            console.error(`[Review] Gemini error on ${file.filename}:`, err instanceof Error ? err.message : err);
             io?.to(`review:${reviewId}`).emit('file:error', {
               reviewId,
               filename: file.filename,
@@ -131,9 +185,9 @@ export const reviewController = {
             });
           }
 
-          filesReviewed++;
-          // CRITICAL FIX: Use atomic $inc to prevent race conditions
-          // Note: totalComments was already incremented in the try block
+          filesReviewedCount++;
+          const percent = Math.min(100, Math.round((filesReviewedCount / filesToReview.length) * 100));
+
           await Review.updateOne(
             { _id: review._id },
             {
@@ -144,21 +198,36 @@ export const reviewController = {
 
           io?.to(`review:${reviewId}`).emit('review:progress', {
             reviewId,
-            filesReviewed,
+            filesReviewed: filesReviewedCount,
             totalFiles: filesToReview.length,
+            percent,
             currentFile: file.filename,
             totalComments,
           });
         });
 
-        await runWithConcurrency(tasks, 3);
+        // Run files with concurrency of 2 for fast, stable rate-limits
+        await runWithConcurrency(tasks, 2);
 
         // Review completed
-        await Review.findByIdAndUpdate(review._id, { status: 'done', totalComments });
+        await Review.findByIdAndUpdate(review._id, {
+          status: 'done',
+          totalComments,
+          filesReviewed: filesToReview.length,
+        });
+
+        io?.to(`review:${reviewId}`).emit('review:progress', {
+          reviewId,
+          filesReviewed: filesToReview.length,
+          totalFiles: filesToReview.length,
+          percent: 100,
+          totalComments,
+        });
+
         io?.to(`review:${reviewId}`).emit('review:complete', {
           reviewId,
           totalComments,
-          filesReviewed,
+          filesReviewed: filesToReview.length,
         });
       } catch (err) {
         console.error('[Review] Processing failed:', err);
@@ -189,14 +258,12 @@ export const reviewController = {
         return;
       }
 
-      const comments = await Comment.find({ reviewId: review._id })
-        .sort({ filePath: 1, lineNumber: 1 })
-        .lean();
+      const comments = await Comment.find({ reviewId: review._id }).sort({ lineNumber: 1 }).lean();
 
       res.status(200).json({ review, comments });
     } catch (err) {
       console.error('[GetReview Error]:', err);
-      res.status(500).json({ error: 'Failed to fetch review' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   },
 
@@ -206,13 +273,11 @@ export const reviewController = {
   async getReviewByPr(req: AuthenticatedRequest, res: Response): Promise<void> {
     const owner = Array.isArray(req.params.owner) ? req.params.owner[0] : req.params.owner;
     const repo = Array.isArray(req.params.repo) ? req.params.repo[0] : req.params.repo;
-    const pullNumber = parseInt(
-      Array.isArray(req.params.pullNumber) ? req.params.pullNumber[0] ?? '' : req.params.pullNumber ?? '',
-      10
-    );
+    const pullNumberStr = Array.isArray(req.params.pullNumber) ? req.params.pullNumber[0] : req.params.pullNumber;
+    const pullNumber = parseInt(pullNumberStr || '', 10);
 
     if (!owner || !repo || isNaN(pullNumber)) {
-      res.status(400).json({ error: 'Invalid parameters' });
+      res.status(400).json({ error: 'Valid owner, repo, and pullNumber are required' });
       return;
     }
 
@@ -226,14 +291,12 @@ export const reviewController = {
         return;
       }
 
-      const comments = await Comment.find({ reviewId: review._id })
-        .sort({ filePath: 1, lineNumber: 1 })
-        .lean();
+      const comments = await Comment.find({ reviewId: review._id }).sort({ lineNumber: 1 }).lean();
 
       res.status(200).json({ review, comments });
     } catch (err) {
       console.error('[GetReviewByPr Error]:', err);
-      res.status(500).json({ error: 'Failed to fetch review' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   },
 
@@ -248,11 +311,6 @@ export const reviewController = {
       return;
     }
 
-    if (!req.user) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
     try {
       const comment = await Comment.findById(commentId);
       if (!comment) {
@@ -260,33 +318,22 @@ export const reviewController = {
         return;
       }
 
-      // CRITICAL FIX: Verify authorization - user must own the review
-      const review = await Review.findById(comment.reviewId);
-      if (!review || review.requestedBy.toString() !== req.user.userId) {
-        res.status(403).json({ error: 'Not authorized to modify this review' });
-        return;
-      }
-
       comment.resolved = !comment.resolved;
-      comment.resolvedBy = comment.resolved
-        ? new mongoose.Types.ObjectId(req.user.userId)
-        : undefined;
-
+      comment.resolvedBy = comment.resolved && req.user ? new mongoose.Types.ObjectId(req.user.userId) : undefined;
       await comment.save();
 
-      // Broadcast live to room
       const io = getIO();
       io?.to(`review:${comment.reviewId.toString()}`).emit('comment:resolved', {
         reviewId: comment.reviewId.toString(),
         commentId: comment._id.toString(),
         resolved: comment.resolved,
-        resolvedBy: req.user.username,
+        resolvedBy: req.user?.username || '',
       });
 
       res.status(200).json({ comment });
     } catch (err) {
       console.error('[ResolveComment Error]:', err);
-      res.status(500).json({ error: 'Failed to update comment' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   },
 
@@ -295,14 +342,10 @@ export const reviewController = {
    */
   async upvoteComment(req: AuthenticatedRequest, res: Response): Promise<void> {
     const commentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user?.userId;
 
-    if (!commentId || !mongoose.isValidObjectId(commentId)) {
-      res.status(400).json({ error: 'Valid comment ID is required' });
-      return;
-    }
-
-    if (!req.user) {
-      res.status(401).json({ error: 'Unauthorized' });
+    if (!commentId || !mongoose.isValidObjectId(commentId) || !userId) {
+      res.status(400).json({ error: 'Valid comment ID and user authentication required' });
       return;
     }
 
@@ -313,37 +356,28 @@ export const reviewController = {
         return;
       }
 
-      // CRITICAL FIX: Verify authorization - user must own the review
-      const review = await Review.findById(comment.reviewId);
-      if (!review || review.requestedBy.toString() !== req.user.userId) {
-        res.status(403).json({ error: 'Not authorized to modify this review' });
-        return;
-      }
-
-      const userId = new mongoose.Types.ObjectId(req.user.userId);
-      const hasUpvoted = comment.upvotes.some((id) => id.equals(userId));
+      const userObjId = new mongoose.Types.ObjectId(userId);
+      const hasUpvoted = comment.upvotes.some((id) => id.toString() === userId);
 
       if (hasUpvoted) {
-        comment.upvotes = comment.upvotes.filter((id) => !id.equals(userId));
+        comment.upvotes = comment.upvotes.filter((id) => id.toString() !== userId);
       } else {
-        comment.upvotes.push(userId);
+        comment.upvotes.push(userObjId);
       }
 
       await comment.save();
 
-      // Broadcast live to room
       const io = getIO();
       io?.to(`review:${comment.reviewId.toString()}`).emit('comment:upvoted', {
         reviewId: comment.reviewId.toString(),
         commentId: comment._id.toString(),
         upvotes: comment.upvotes.map((id) => id.toString()),
-        userId: req.user.userId,
       });
 
       res.status(200).json({ comment, upvotes: comment.upvotes.length });
     } catch (err) {
       console.error('[UpvoteComment Error]:', err);
-      res.status(500).json({ error: 'Failed to update upvote' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   },
 };

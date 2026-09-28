@@ -13,6 +13,7 @@ export interface PresenceUser {
 export interface ReviewProgress {
   filesReviewed: number;
   totalFiles: number;
+  percent?: number;
   currentFile?: string;
 }
 
@@ -89,12 +90,13 @@ export function useReviewSocket({
     };
 
     // Handle review progress
-    const handleProgress = (data: { reviewId: string; filesReviewed: number; totalFiles: number; currentFile?: string }) => {
+    const handleProgress = (data: { reviewId: string; filesReviewed: number; totalFiles: number; percent?: number; currentFile?: string }) => {
       if (data.reviewId === reviewId) {
         setIsStreaming(true);
         setProgress({
           filesReviewed: data.filesReviewed,
           totalFiles: data.totalFiles,
+          percent: data.percent,
           currentFile: data.currentFile,
         });
       }

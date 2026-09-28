@@ -52,15 +52,16 @@ export const geminiService = {
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 
-    const userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${patch}\n\`\`\``;
+    // Truncate overly long patches to prevent timeout on massive files
+    const trimmedPatch = patch.length > 25000 ? patch.slice(0, 25000) + '\n... [diff truncated]' : patch;
+    const userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${trimmedPatch}\n\`\`\``;
 
-    // Active supported Gemini models in order of preference
+    // Active supported fast Gemini models
     const modelsToTry = [
       'gemini-3.7-flash',
       'gemini-3.5-flash',
       'gemini-3.8-flash',
       'gemini-flash-latest',
-      'gemini-2.5-flash',
     ];
 
     let rawResponse = '';
@@ -68,25 +69,34 @@ export const geminiService = {
 
     for (const model of modelsToTry) {
       try {
-        const response = await ai.models.generateContent({
+        console.log(`[Gemini] Requesting analysis for ${filename} using ${model}...`);
+
+        // Enforce 14-second timeout per model attempt to avoid hanging
+        const apiCall = ai.models.generateContent({
           model,
           config: {
             systemInstruction: SYSTEM_PROMPT,
-            temperature: 0.2,
+            temperature: 0.15,
             maxOutputTokens: 2048,
             responseMimeType: 'application/json',
           },
           contents: userPrompt,
         });
 
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout after 14s for model ${model}`)), 14000)
+        );
+
+        const response: any = await Promise.race([apiCall, timeoutPromise]);
         rawResponse = response.text ?? '';
+
         if (rawResponse) {
-          console.log(`[Gemini] Successfully reviewed ${filename} using ${model}`);
-          break; // Successfully got response
+          console.log(`[Gemini] Analysis completed successfully for ${filename} with ${model}`);
+          break;
         }
       } catch (err) {
         lastError = err;
-        console.warn(`[Gemini] Model ${model} failed for ${filename}, attempting next model... Error:`, (err as Error).message);
+        console.warn(`[Gemini] Model ${model} failed for ${filename}:`, (err as Error).message);
       }
     }
 

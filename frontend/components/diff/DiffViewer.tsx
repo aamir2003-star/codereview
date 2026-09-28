@@ -279,10 +279,28 @@ export function DiffViewer({
             <PresenceIndicator users={activeUsers} currentUserId={userId} />
 
             {isStreaming || isReviewing ? (
-              <div className="flex items-center gap-2 rounded-xl bg-neutral-800/80 border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-400 font-mono shadow-sm">
-                <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
-                <span>
-                  Streaming… {progress ? `(${progress.filesReviewed}/${progress.totalFiles || files.length} files)` : ''}
+              <div className="flex items-center gap-3 rounded-xl bg-neutral-900/90 border border-emerald-500/40 px-3.5 py-1.5 shadow-md shadow-emerald-500/10 backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                  <span className="font-mono text-xs font-bold text-emerald-300">
+                    Analyzing {progress?.percent ?? (progress?.totalFiles ? Math.min(100, Math.round((progress.filesReviewed / progress.totalFiles) * 100)) : 15)}%
+                  </span>
+                </div>
+
+                {/* Animated Mini Progress Bar */}
+                <div className="hidden sm:block w-20 h-1.5 rounded-full bg-neutral-950 overflow-hidden border border-neutral-800">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                    initial={{ width: '10%' }}
+                    animate={{
+                      width: `${progress?.percent ?? (progress?.totalFiles ? Math.min(100, Math.round((progress.filesReviewed / progress.totalFiles) * 100)) : 15)}%`,
+                    }}
+                    transition={{ ease: 'easeOut', duration: 0.3 }}
+                  />
+                </div>
+
+                <span className="text-[11px] font-mono text-neutral-400 hidden md:inline">
+                  {progress ? `(${progress.filesReviewed}/${progress.totalFiles} files)` : 'Starting AI engine...'}
                 </span>
               </div>
             ) : currentReview || localComments.length > 0 ? (
