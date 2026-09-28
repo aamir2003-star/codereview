@@ -8,6 +8,7 @@ export interface IComment extends Document {
   lineNumber: number;
   severity: Severity;
   message: string;
+  suggestedFix?: string;
   upvotes: mongoose.Types.ObjectId[];
   resolved: boolean;
   resolvedBy?: mongoose.Types.ObjectId;
@@ -31,6 +32,7 @@ const CommentSchema = new Schema<IComment>(
       required: true,
     },
     message: { type: String, required: true },
+    suggestedFix: { type: String, default: null },
     upvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     resolved: { type: Boolean, default: false },
     resolvedBy: { type: Schema.Types.ObjectId, ref: 'User' },

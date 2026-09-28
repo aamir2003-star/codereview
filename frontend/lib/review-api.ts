@@ -10,6 +10,7 @@ export interface PersistedComment {
   lineNumber: number;
   severity: Severity;
   message: string;
+  suggestedFix?: string;
   upvotes: string[];
   resolved: boolean;
   resolvedBy?: string;

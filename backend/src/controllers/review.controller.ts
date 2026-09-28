@@ -156,6 +156,7 @@ export const reviewController = {
                   lineNumber: c.line,
                   severity: c.severity,
                   message: c.message,
+                  suggestedFix: c.suggestedFix || undefined,
                 }))
               );
 

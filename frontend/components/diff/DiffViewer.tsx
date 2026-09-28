@@ -26,6 +26,7 @@ import {
   Zap,
   RotateCw,
   Square,
+  Copy,
 } from 'lucide-react';
 
 interface DiffViewerProps {
@@ -71,6 +72,7 @@ function CommentCardInline({
   onUpvote?: (commentId: string) => void;
   currentUserId?: string;
 }) {
+  const [copied, setCopied] = useState(false);
   const Icon = SEVERITY_ICONS[comment.severity];
   const hasUpvoted = currentUserId ? comment.upvotes.includes(currentUserId) : false;
 
@@ -79,7 +81,7 @@ function CommentCardInline({
       initial={{ opacity: 0, x: -12, scale: 0.98 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-      className={`my-2 mx-3 rounded-xl p-3 border text-xs font-sans shadow-lg transition-all duration-200 backdrop-blur-md ${
+      className={`my-2 mx-3 rounded-xl p-3.5 border text-xs font-sans shadow-lg transition-all duration-200 backdrop-blur-md ${
         comment.resolved
           ? 'bg-neutral-900/40 border-neutral-800 text-neutral-400 opacity-75'
           : comment.severity === 'security'
@@ -96,7 +98,7 @@ function CommentCardInline({
           <Badge variant={comment.severity}>{SEVERITY_LABEL[comment.severity]}</Badge>
           <span className="text-[11px] font-mono text-neutral-400">Line {comment.lineNumber}</span>
           <span className="text-[10px] text-emerald-400/90 flex items-center gap-1 font-mono">
-            <Sparkles className="h-3 w-3" /> Gemini 2.0
+            <Sparkles className="h-3 w-3" /> Gemini Flash AI
           </span>
         </div>
         {comment.resolved && (
@@ -108,8 +110,46 @@ function CommentCardInline({
 
       <div className="flex items-start gap-2.5 mt-1">
         <Icon className="h-4 w-4 shrink-0 mt-0.5" />
-        <p className="flex-1 leading-relaxed text-xs text-neutral-100">{comment.message}</p>
+        <p className="flex-1 leading-relaxed text-xs text-neutral-100 font-medium">{comment.message}</p>
       </div>
+
+      {/* Suggested Code Fix */}
+      {comment.suggestedFix && (
+        <div className="mt-3 rounded-xl border border-emerald-500/30 bg-neutral-950/90 p-3 shadow-inner">
+          <div className="flex items-center justify-between text-[11px] font-mono text-emerald-400 mb-1.5 font-semibold">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+              Suggested Fix
+            </span>
+            <button
+              onClick={() => {
+                if (comment.suggestedFix) {
+                  navigator.clipboard.writeText(comment.suggestedFix);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }
+              }}
+              className="flex items-center gap-1 text-[10px] font-sans font-medium text-neutral-300 hover:text-emerald-300 transition-all bg-neutral-800/90 hover:bg-neutral-800 px-2 py-0.5 rounded-md border border-neutral-700/60 shadow-sm"
+              title="Copy code fix to clipboard"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-400" />
+                  <span className="text-emerald-400 font-bold">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  <span>Copy Fix</span>
+                </>
+              )}
+            </button>
+          </div>
+          <pre className="text-[11px] font-mono text-emerald-200/90 bg-neutral-900/90 rounded-lg p-2.5 overflow-x-auto whitespace-pre border border-neutral-800/80 leading-relaxed selection:bg-emerald-500/30">
+            {comment.suggestedFix}
+          </pre>
+        </div>
+      )}
 
       <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px]">
         <button
