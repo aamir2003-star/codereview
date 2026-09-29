@@ -28,6 +28,7 @@ import {
   Square,
   Copy,
 } from 'lucide-react';
+import { HighTrafficModal } from '@/components/ui/HighTrafficModal';
 
 interface DiffViewerProps {
   pr: PullRequest;
@@ -201,6 +202,7 @@ export function DiffViewer({
   onCommentUpvoted,
 }: DiffViewerProps) {
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [reviewError, setReviewError] = useState<{ message: string; isHighDemand?: boolean } | null>(null);
 
   // Socket.io Real-Time Streaming Hook
   const { activeUsers, progress, isStreaming } = useReviewSocket({
@@ -214,6 +216,12 @@ export function DiffViewer({
     },
     onCommentUpvoted: (data) => {
       onCommentUpvoted?.(data);
+    },
+    onReviewError: (data) => {
+      setReviewError({
+        message: data.message,
+        isHighDemand: data.isHighDemand,
+      });
     },
   });
 
@@ -262,6 +270,18 @@ export function DiffViewer({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 lg:p-8">
+      {/* High Traffic / AI Error Pop-up Modal */}
+      <HighTrafficModal
+        isOpen={!!reviewError}
+        message={reviewError?.message}
+        isHighDemand={reviewError?.isHighDemand}
+        onRetry={() => {
+          setReviewError(null);
+          onStartReview();
+        }}
+        onClose={() => setReviewError(null)}
+      />
+
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -309,28 +329,33 @@ export function DiffViewer({
 
             {isStreaming || isReviewing ? (
               <div className="flex items-center gap-2.5">
-                <div className="flex items-center gap-3 rounded-xl bg-neutral-900/90 border border-emerald-500/40 px-3.5 py-1.5 shadow-md shadow-emerald-500/10 backdrop-blur-md">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                    <span className="font-mono text-xs font-bold text-emerald-300">
-                      Analyzing {progress?.percent ?? (progress?.totalFiles ? Math.min(100, Math.round((progress.filesReviewed / progress.totalFiles) * 100)) : 15)}%
+                <div className="flex flex-col items-start gap-1 rounded-xl bg-neutral-900/95 border border-emerald-500/40 px-3.5 py-1.5 shadow-md shadow-emerald-500/10 backdrop-blur-md min-w-[230px]">
+                  <div className="flex items-center justify-between w-full gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                      <span className="font-mono text-xs font-bold text-emerald-300">
+                        Analyzing {progress?.percent ?? 15}%
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-neutral-400">
+                      {progress?.filesReviewed ?? 0}/{progress?.totalFiles ?? files.length} files
                     </span>
                   </div>
 
-                  {/* Animated Mini Progress Bar */}
-                  <div className="hidden sm:block w-20 h-1.5 rounded-full bg-neutral-950 overflow-hidden border border-neutral-800">
+                  {/* Animated Continuous Progress Bar */}
+                  <div className="w-full h-1.5 rounded-full bg-neutral-950 overflow-hidden border border-neutral-800">
                     <motion.div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-                      initial={{ width: '10%' }}
+                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                      initial={{ width: '8%' }}
                       animate={{
-                        width: `${progress?.percent ?? (progress?.totalFiles ? Math.min(100, Math.round((progress.filesReviewed / progress.totalFiles) * 100)) : 15)}%`,
+                        width: `${Math.max(8, Math.min(100, progress?.percent ?? 15))}%`,
                       }}
-                      transition={{ ease: 'easeOut', duration: 0.3 }}
+                      transition={{ ease: 'easeOut', duration: 0.4 }}
                     />
                   </div>
 
-                  <span className="text-[11px] font-mono text-neutral-400 hidden md:inline">
-                    {progress ? `(${progress.filesReviewed}/${progress.totalFiles} files)` : 'Starting AI engine...'}
+                  <span className="text-[10px] font-mono text-neutral-400 truncate max-w-[210px]">
+                    {progress?.stage || (progress?.currentFile ? `Scanning ${progress.currentFile}` : 'Neural engine active...')}
                   </span>
                 </div>
 
@@ -338,7 +363,7 @@ export function DiffViewer({
                   <Button
                     onClick={onStopReview}
                     size="sm"
-                    className="gap-1.5 bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-semibold px-3 py-1.5 rounded-xl shadow-sm transition-all"
+                    className="gap-1.5 bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-semibold px-3 py-2 rounded-xl shadow-sm transition-all h-full"
                     title="Stop ongoing AI review"
                   >
                     <Square className="h-3 w-3 fill-current" />

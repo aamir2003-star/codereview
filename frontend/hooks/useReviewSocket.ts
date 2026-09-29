@@ -14,6 +14,7 @@ export interface ReviewProgress {
   filesReviewed: number;
   totalFiles: number;
   percent?: number;
+  stage?: string;
   currentFile?: string;
 }
 
@@ -24,6 +25,7 @@ interface UseReviewSocketProps {
   onCommentResolved?: (data: { commentId: string; resolved: boolean; resolvedBy: string }) => void;
   onCommentUpvoted?: (data: { commentId: string; upvotes: string[] }) => void;
   onReviewComplete?: (data: { totalComments: number }) => void;
+  onReviewError?: (data: { reviewId: string; message: string; isHighDemand?: boolean }) => void;
 }
 
 export function useReviewSocket({
@@ -33,6 +35,7 @@ export function useReviewSocket({
   onCommentResolved,
   onCommentUpvoted,
   onReviewComplete,
+  onReviewError,
 }: UseReviewSocketProps) {
   const [activeUsers, setActiveUsers] = useState<PresenceUser[]>([]);
   const [progress, setProgress] = useState<ReviewProgress | null>(null);
@@ -44,6 +47,7 @@ export function useReviewSocket({
     onCommentResolved,
     onCommentUpvoted,
     onReviewComplete,
+    onReviewError,
   });
 
   useEffect(() => {
@@ -52,6 +56,7 @@ export function useReviewSocket({
       onCommentResolved,
       onCommentUpvoted,
       onReviewComplete,
+      onReviewError,
     };
   });
 
@@ -90,13 +95,21 @@ export function useReviewSocket({
     };
 
     // Handle review progress
-    const handleProgress = (data: { reviewId: string; filesReviewed: number; totalFiles: number; percent?: number; currentFile?: string }) => {
+    const handleProgress = (data: {
+      reviewId: string;
+      filesReviewed: number;
+      totalFiles: number;
+      percent?: number;
+      stage?: string;
+      currentFile?: string;
+    }) => {
       if (data.reviewId === reviewId) {
         setIsStreaming(true);
         setProgress({
           filesReviewed: data.filesReviewed,
           totalFiles: data.totalFiles,
           percent: data.percent,
+          stage: data.stage,
           currentFile: data.currentFile,
         });
       }
@@ -107,6 +120,14 @@ export function useReviewSocket({
       if (data.reviewId === reviewId) {
         setIsStreaming(false);
         callbacksRef.current.onReviewComplete?.(data);
+      }
+    };
+
+    // Handle review error (e.g. high traffic or model errors)
+    const handleError = (data: { reviewId: string; message: string; isHighDemand?: boolean }) => {
+      if (data.reviewId === reviewId) {
+        setIsStreaming(false);
+        callbacksRef.current.onReviewError?.(data);
       }
     };
 
@@ -122,6 +143,7 @@ export function useReviewSocket({
     socket.on('comment:upvoted', handleUpvoted);
     socket.on('review:progress', handleProgress);
     socket.on('review:complete', handleComplete);
+    socket.on('review:error', handleError);
     socket.on('presence:update', handlePresence);
 
     return () => {
@@ -131,6 +153,7 @@ export function useReviewSocket({
       socket.off('comment:upvoted', handleUpvoted);
       socket.off('review:progress', handleProgress);
       socket.off('review:complete', handleComplete);
+      socket.off('review:error', handleError);
       socket.off('presence:update', handlePresence);
     };
   }, [reviewId, token]); // Stable: only re-subscribes when reviewId or token actually changes!

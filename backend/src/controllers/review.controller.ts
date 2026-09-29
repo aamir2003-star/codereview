@@ -107,11 +107,14 @@ export const reviewController = {
         console.log(`[Review] Starting review for ${owner}/${repo} #${pullNumber} (${filesToReview.length} files to review)`);
 
         // Emit initial progress starting point
+        const totalSteps = filesToReview.length * 3;
+
         io?.to(`review:${reviewId}`).emit('review:progress', {
           reviewId,
           filesReviewed: 0,
           totalFiles: filesToReview.length,
-          percent: 10,
+          percent: 5,
+          stage: 'Initializing Gemini AI engine...',
           currentFile: filesToReview[0]?.filename || 'Starting analyzer...',
           totalComments: 0,
         });
@@ -119,7 +122,7 @@ export const reviewController = {
         let totalComments = 0;
         let filesReviewedCount = 0;
 
-        // Process files sequentially for instant, rock-solid execution
+        // Process files sequentially with smooth multi-phase progress
         for (let i = 0; i < filesToReview.length; i++) {
           // Check if user requested to stop/cancel review
           if (activeReviewAborts.get(reviewId)) {
@@ -128,13 +131,14 @@ export const reviewController = {
           }
 
           const file = filesToReview[i];
-          const currentFilePercent = Math.min(95, Math.round(((i + 1) / filesToReview.length) * 100));
+          const fileBasePercent = Math.round(((i * 3 + 1) / totalSteps) * 90) + 5;
 
           io?.to(`review:${reviewId}`).emit('review:progress', {
             reviewId,
             filesReviewed: filesReviewedCount,
             totalFiles: filesToReview.length,
-            percent: Math.max(15, Math.round((i / filesToReview.length) * 100)),
+            percent: fileBasePercent,
+            stage: `Scanning ${file.filename}...`,
             currentFile: file.filename,
             totalComments,
           });
@@ -146,6 +150,18 @@ export const reviewController = {
 
           try {
             console.log(`[Review] Analyzing file [${i + 1}/${filesToReview.length}]: ${file.filename} (${file.patch.length} chars)`);
+
+            // Phase 2: AI reasoning & analysis
+            io?.to(`review:${reviewId}`).emit('review:progress', {
+              reviewId,
+              filesReviewed: filesReviewedCount,
+              totalFiles: filesToReview.length,
+              percent: Math.min(94, fileBasePercent + 15),
+              stage: `Neural analysis & code audit for ${file.filename}...`,
+              currentFile: file.filename,
+              totalComments,
+            });
+
             const comments = await geminiService.reviewFileDiff(file.filename, file.patch);
 
             if (comments.length > 0) {
@@ -193,11 +209,14 @@ export const reviewController = {
             }
           );
 
+          const stepCompletePercent = Math.min(95, Math.round(((i + 1) / filesToReview.length) * 92) + 5);
+
           io?.to(`review:${reviewId}`).emit('review:progress', {
             reviewId,
             filesReviewed: filesReviewedCount,
             totalFiles: filesToReview.length,
-            percent: currentFilePercent,
+            percent: stepCompletePercent,
+            stage: `Completed ${file.filename}`,
             currentFile: file.filename,
             totalComments,
           });
@@ -218,6 +237,7 @@ export const reviewController = {
           filesReviewed: filesReviewedCount,
           totalFiles: filesToReview.length,
           percent: 100,
+          stage: 'Review complete',
           totalComments,
         });
 
@@ -228,10 +248,23 @@ export const reviewController = {
         });
       } catch (err) {
         console.error('[Review] Processing failed:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isHighDemand =
+          errMsg.includes('503') ||
+          errMsg.includes('high demand') ||
+          errMsg.includes('UNAVAILABLE') ||
+          errMsg.includes('RESOURCE_EXHAUSTED') ||
+          errMsg.includes('quota');
+
+        const userMessage = isHighDemand
+          ? 'Google Gemini AI is experiencing temporary high demand spikes. Please wait a moment and click "AI Review Again".'
+          : errMsg || 'Review process encountered an unexpected issue.';
+
         await Review.findByIdAndUpdate(review._id, { status: 'error' });
         io?.to(`review:${reviewId}`).emit('review:error', {
           reviewId,
-          message: err instanceof Error ? err.message : 'Review process encountered an error',
+          isHighDemand,
+          message: userMessage,
         });
       } finally {
         activeReviewAborts.delete(reviewId);
