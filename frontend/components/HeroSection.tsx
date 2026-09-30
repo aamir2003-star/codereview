@@ -41,22 +41,8 @@ export function HeroSection() {
   };
 
   return (
-    <section className="relative isolate overflow-hidden px-4 pb-20 pt-12 sm:px-6 lg:pb-32 lg:pt-20 bg-black text-white min-h-[90vh] flex items-center">
-      {/* Background Video Layer */}
-      <video
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-40 z-0 anim-fade-in"
-        src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260813_115057_94c3699b-0fd1-4124-bcf3-3626bb8c1f77.mp4"
-        autoPlay
-        muted
-        loop
-        playsInline
-      />
-
-      {/* Subtle Vignette & Scrim Gradient for Readability */}
-      <div className="absolute inset-0 z-0 pointer-events-none bg-gradient-to-b from-black/60 via-black/30 to-black" />
-      <div className="absolute inset-0 z-0 pointer-events-none bg-radial-gradient from-transparent via-black/20 to-black" />
-
-      <div className="mx-auto max-w-7xl relative z-10 w-full">
+    <section className="relative isolate overflow-hidden px-4 pb-20 pt-12 sm:px-6 lg:pb-32 lg:pt-20 bg-black text-white">
+      <div className="mx-auto max-w-7xl">
         <div className="grid items-center gap-12 lg:grid-cols-12">
           {/* Left Column: Headlines & CTA */}
           <motion.div
@@ -66,23 +52,21 @@ export function HeroSection() {
             className="lg:col-span-6 max-w-2xl space-y-6"
           >
             {/* Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-black/60 backdrop-blur-md text-white">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#262626] bg-[#0d0d0d] text-white">
               <span className="h-1.5 w-1.5 rounded-full bg-[#007acc] shadow-[0_0_6px_#007acc]" />
-              <span className="text-xs text-[#a1a1aa] font-medium tracking-wide">
-                AI Code Review Engine
+              <span className="text-xs text-[#a1a1aa] font-medium">
+                Multi-Language Code Review &amp; PR Architecture
               </span>
             </div>
 
             {/* Main Hero Headline */}
             <h1 className="text-4xl sm:text-6xl font-bold text-white tracking-tight leading-[1.08]">
-              Code Review,
-              <br />
-              Without the Guesswork.
+              Automate PR code reviews with AI precision.
             </h1>
 
             {/* Body copy */}
             <p className="text-base sm:text-lg text-[#a1a1aa] leading-relaxed max-w-xl">
-              Understand every change. Catch problems earlier. Ship with confidence. ReviewCopilot maps PR architecture, detects security vulnerabilities, and generates line-accurate fixes across 50+ languages.
+              Connect your GitHub repository. ReviewCopilot inspects unified diffs across 50+ languages, synthesizes high-level PR system architecture, and isolates security vulnerabilities and logic bugs with drop-in fixes.
             </p>
 
             {/* CTAs */}
@@ -90,7 +74,7 @@ export function HeroSection() {
               {user ? (
                 <Link href="/dashboard">
                   <button className="h-11 px-6 rounded-xl bg-white text-black hover:bg-[#e4e4e7] font-semibold text-sm transition-all cursor-pointer flex items-center gap-2 shadow-sm">
-                    <span>Start Reviewing</span>
+                    <span>Go to Dashboard</span>
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </Link>
@@ -100,13 +84,13 @@ export function HeroSection() {
                   className="h-11 px-6 rounded-xl bg-white text-black hover:bg-[#e4e4e7] font-semibold text-sm transition-all cursor-pointer flex items-center gap-2.5 shadow-sm"
                 >
                   <GitFork className="h-4 w-4" />
-                  <span>Start Reviewing</span>
+                  <span>Connect GitHub</span>
                 </button>
               )}
 
               <a href="#features">
-                <button className="h-11 px-5 rounded-xl border border-[#3a3a3a] hover:border-white bg-black/40 backdrop-blur-md text-[#d4d4d8] hover:text-white text-sm font-medium transition-all cursor-pointer">
-                  See How It Works
+                <button className="h-11 px-5 rounded-xl border border-[#3a3a3a] hover:border-white bg-transparent text-[#d4d4d8] hover:text-white text-sm font-medium transition-all cursor-pointer">
+                  View Supported Languages
                 </button>
               </a>
             </div>
