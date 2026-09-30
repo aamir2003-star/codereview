@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface PreloaderProps {
   onComplete?: () => void;
+  minDurationMs?: number;
 }
 
 const PHRASES = [
@@ -15,39 +16,44 @@ const PHRASES = [
   'REVIEW COPILOT // SYSTEM READY',
 ];
 
-export function Preloader({ onComplete }: PreloaderProps) {
+export function Preloader({
+  onComplete,
+  minDurationMs = 2400,
+}: PreloaderProps) {
   const [progress, setProgress] = useState(0);
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [isDone, setIsDone] = useState(false);
 
-  // Phrase rotation
+  // Phrase rotation (switches every ~500ms so 4-5 phrases are shown during the 2.4s duration)
   useEffect(() => {
     const phraseInterval = setInterval(() => {
       setPhraseIndex((prev) => (prev + 1) % PHRASES.length);
-    }, 450);
+    }, 480);
 
     return () => clearInterval(phraseInterval);
   }, []);
 
-  // Smooth numeric counter
+  // Smooth numeric counter calibrated to last minDurationMs (2.4s)
   useEffect(() => {
+    const startTime = Date.now();
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsDone(true);
-          setTimeout(() => {
-            onComplete?.();
-          }, 400);
-          return 100;
-        }
-        const step = Math.floor(Math.random() * 9) + 6;
-        return Math.min(100, prev + step);
-      });
-    }, 80);
+      const elapsed = Date.now() - startTime;
+      const targetPercent = Math.min(100, Math.floor((elapsed / minDurationMs) * 100));
+
+      setProgress(targetPercent);
+
+      if (elapsed >= minDurationMs) {
+        clearInterval(interval);
+        setProgress(100);
+        setIsDone(true);
+        setTimeout(() => {
+          onComplete?.();
+        }, 500);
+      }
+    }, 30);
 
     return () => clearInterval(interval);
-  }, [onComplete]);
+  }, [onComplete, minDurationMs]);
 
   return (
     <AnimatePresence>

@@ -7,6 +7,7 @@ interface KineticTextPreloaderProps {
   isReady: boolean;
   loadedCount?: number;
   totalCount?: number;
+  minDurationMs?: number;
   onComplete?: () => void;
 }
 
@@ -22,35 +23,45 @@ export function KineticTextPreloader({
   isReady,
   loadedCount = 0,
   totalCount = 11,
+  minDurationMs = 2200,
   onComplete,
 }: KineticTextPreloaderProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [displayedPercent, setDisplayedPercent] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+
+  // Minimum time guarantee
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinTimeElapsed(true);
+    }, minDurationMs);
+    return () => clearTimeout(timer);
+  }, [minDurationMs]);
 
   // Cycle through phrases smoothly
   useEffect(() => {
     const phraseInterval = setInterval(() => {
       setPhraseIndex((prev) => (prev + 1) % PHRASES.length);
-    }, 550);
+    }, 450);
 
     return () => clearInterval(phraseInterval);
   }, []);
 
-  // Compute percentage based on actual loaded frame assets or simulated smooth increment
+  // Compute percentage based on actual loaded frame assets & timer
   useEffect(() => {
-    if (isReady) {
+    if (isReady && minTimeElapsed) {
       setDisplayedPercent(100);
       const timeout = setTimeout(() => {
         setIsVisible(false);
         onComplete?.();
-      }, 450);
+      }, 400);
       return () => clearTimeout(timeout);
     } else {
-      const calculated = totalCount > 0 ? Math.round((loadedCount / totalCount) * 90) : 0;
+      const calculated = totalCount > 0 ? Math.round((loadedCount / totalCount) * 88) : 0;
       setDisplayedPercent((prev) => Math.max(prev, calculated));
     }
-  }, [isReady, loadedCount, totalCount, onComplete]);
+  }, [isReady, minTimeElapsed, loadedCount, totalCount, onComplete]);
 
   return (
     <AnimatePresence>
