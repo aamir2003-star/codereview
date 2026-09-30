@@ -12,7 +12,7 @@ export const heroFrames: string[] = Array.from({ length: FRAME_COUNT }, (_, i) =
 });
 
 /** Scroll distance multiplier (in viewport heights) for the pinned animation */
-export const SCRUB_DISTANCE_VH = 300;
+export const SCRUB_DISTANCE_VH = 180;
 
 /** Image native dimensions (all frames share the same size) */
 export const FRAME_WIDTH = 1086;

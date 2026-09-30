@@ -9,11 +9,20 @@ import { FRAME_COUNT, SCRUB_DISTANCE_VH, heroFrames, FRAME_WIDTH, FRAME_HEIGHT }
 gsap.registerPlugin(ScrollTrigger);
 
 /**
- * CinematicHero — scroll-driven 12-frame canvas animation.
+ * CinematicHero — scroll-driven canvas animation with frame crossfading.
  *
- * PERFORMANCE: Zero React state during scroll. Everything runs through
- * refs and direct canvas draws inside GSAP's onUpdate. This gives us
- * locked 60fps because we never trigger a React re-render while scrolling.
+ * SMOOTHNESS STRATEGY:
+ * With 12 images, hard-switching frames feels choppy. Instead we treat
+ * the progress as a continuous float (e.g. 3.7) and alpha-blend between
+ * frame 3 and frame 4 at 70% opacity. This gives the illusion of many
+ * more frames — effectively infinite interpolation.
+ *
+ * PERFORMANCE:
+ * - Zero React state during scroll
+ * - Direct canvas draws inside GSAP onUpdate
+ * - scrub: true for 1:1 scroll mapping
+ * - alpha:false canvas for GPU fast path
+ * - Compositor layer via will-change + translateZ
  */
 export function CinematicHero() {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -21,31 +30,27 @@ export function CinematicHero() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
   const readyRef = useRef(false);
-  const lastFrameRef = useRef(-1);
+  const lastProgressRef = useRef(-1);
   const loaderRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<HTMLDivElement>(null);
 
   /* ------------------------------------------------------------------ */
-  /*  Draw a frame directly — no React involved                          */
+  /*  Draw with crossfade between adjacent frames                        */
   /* ------------------------------------------------------------------ */
-  function drawFrame(index: number) {
+  function drawAtProgress(progress: number) {
     const canvas = canvasRef.current;
     if (!canvas || !readyRef.current) return;
 
-    const ctx = canvas.getContext('2d', { alpha: false });
+    // Skip if progress hasn't meaningfully changed
+    if (Math.abs(progress - lastProgressRef.current) < 0.001) return;
+    lastProgressRef.current = progress;
+
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    const img = imagesRef.current[index];
-    if (!img) return;
-
-    // Skip redundant draws
-    if (index === lastFrameRef.current) return;
-    lastFrameRef.current = index;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const dispW = canvas.clientWidth;
     const dispH = canvas.clientHeight;
-
     const backW = Math.round(dispW * dpr);
     const backH = Math.round(dispH * dpr);
 
@@ -54,28 +59,66 @@ export function CinematicHero() {
       canvas.height = backH;
     }
 
-    // Fill with background color first (avoid flash)
+    // Background fill
     ctx.fillStyle = '#050505';
     ctx.fillRect(0, 0, backW, backH);
 
-    // "cover" fit — fill canvas, maintain aspect ratio, crop overflow
+    // Continuous float position: 0.0 → 11.0
+    const floatIdx = progress * (FRAME_COUNT - 1);
+    const idxA = Math.floor(floatIdx);
+    const idxB = Math.min(idxA + 1, FRAME_COUNT - 1);
+    const blend = floatIdx - idxA; // 0–1 fraction between frames
+
+    const imgA = imagesRef.current[idxA];
+    const imgB = imagesRef.current[idxB];
+    if (!imgA) return;
+
+    // CONTAIN fit — show full character, never crop
     const imgAspect = FRAME_WIDTH / FRAME_HEIGHT;
     const canvasAspect = backW / backH;
 
     let drawW: number, drawH: number;
     if (canvasAspect > imgAspect) {
-      drawW = backW;
-      drawH = drawW / imgAspect;
-    } else {
+      // Canvas wider than image — fit by height
       drawH = backH;
       drawW = drawH * imgAspect;
+    } else {
+      // Canvas taller — fit by width
+      drawW = backW;
+      drawH = drawW / imgAspect;
     }
 
-    // Center the image
-    const xOff = (backW - drawW) / 2;
-    const yOff = (backH - drawH) / 2;
+    // Position: center-right on desktop, centered on mobile
+    const isMobile = dispW < 768;
+    let xOff: number;
+    if (isMobile) {
+      xOff = (backW - drawW) / 2;
+    } else {
+      // Push character to the right ~60% mark
+      xOff = backW * 0.35 - drawW * 0.15;
+      // Clamp so character doesn't go off-screen right
+      xOff = Math.min(xOff, backW - drawW);
+      xOff = Math.max(xOff, 0);
+    }
 
-    ctx.drawImage(img, xOff, yOff, drawW, drawH);
+    // Align bottom of character to bottom of canvas
+    const yOff = backH - drawH;
+
+    // Draw frame A
+    if (blend < 0.01 || idxA === idxB) {
+      // No blending needed — single frame
+      ctx.globalAlpha = 1;
+      ctx.drawImage(imgA, xOff, yOff, drawW, drawH);
+    } else {
+      // Crossfade: draw A at (1-blend), then B at blend on top
+      ctx.globalAlpha = 1;
+      ctx.drawImage(imgA, xOff, yOff, drawW, drawH);
+
+      ctx.globalAlpha = blend;
+      ctx.drawImage(imgB!, xOff, yOff, drawW, drawH);
+
+      ctx.globalAlpha = 1;
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -113,23 +156,21 @@ export function CinematicHero() {
         }, 400);
       }
 
-      // Draw first frame
-      drawFrame(0);
+      drawAtProgress(0);
     });
 
     return () => { cancelled = true; };
   }, []);
 
   /* ------------------------------------------------------------------ */
-  /*  Detect reduced motion                                               */
+  /*  Reduced motion — show final frame                                   */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (mql.matches) {
-      // Show last frame immediately once loaded
       const check = setInterval(() => {
         if (readyRef.current) {
-          drawFrame(FRAME_COUNT - 1);
+          drawAtProgress(1);
           clearInterval(check);
         }
       }, 100);
@@ -138,7 +179,7 @@ export function CinematicHero() {
   }, []);
 
   /* ------------------------------------------------------------------ */
-  /*  GSAP ScrollTrigger — direct canvas draw, zero React state           */
+  /*  GSAP ScrollTrigger                                                  */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -150,7 +191,6 @@ export function CinematicHero() {
     if (!wrapper || !section) return;
 
     const ctx = gsap.context(() => {
-      // Subtle 3D parallax on the character container
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: wrapper,
@@ -158,28 +198,20 @@ export function CinematicHero() {
           end: `+=${SCRUB_DISTANCE_VH}vh`,
           pin: section,
           pinSpacing: true,
-          scrub: true, // direct 1:1 — no lerp delay
+          scrub: true,
           onUpdate: (self) => {
             if (!readyRef.current) return;
-
-            const p = self.progress;
-            const idx = Math.min(
-              FRAME_COUNT - 1,
-              Math.floor(p * FRAME_COUNT),
-            );
-
-            // Direct canvas draw — no React setState
-            drawFrame(idx);
+            drawAtProgress(self.progress);
           },
         },
       });
 
-      // Subtle 3D scale + translateZ for depth feel
+      // Subtle 3D parallax on the character wrapper
       if (character) {
         tl.fromTo(
           character,
-          { scale: 1.02, y: 10 },
-          { scale: 1.0, y: -10, ease: 'none' },
+          { scale: 1.03, y: 8 },
+          { scale: 1.0, y: -8, ease: 'none' },
           0,
         );
       }
@@ -189,18 +221,17 @@ export function CinematicHero() {
   }, []);
 
   /* ------------------------------------------------------------------ */
-  /*  Resize → redraw current frame                                       */
+  /*  Resize → redraw at current progress                                 */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ro = new ResizeObserver(() => {
-      // Force redraw at current frame
-      const cur = lastFrameRef.current;
-      lastFrameRef.current = -1; // reset so drawFrame doesn't skip
+      const cur = lastProgressRef.current;
+      lastProgressRef.current = -1; // force redraw
       if (readyRef.current && cur >= 0) {
-        requestAnimationFrame(() => drawFrame(cur));
+        requestAnimationFrame(() => drawAtProgress(cur));
       }
     });
     ro.observe(canvas);
@@ -227,58 +258,52 @@ export function CinematicHero() {
           </div>
         </div>
 
-        {/* Character canvas — lives in a 3D-transform container for parallax */}
+        {/* Character canvas with 3D parallax container */}
         <div
           ref={characterRef}
           className="absolute inset-0 z-[1]"
-          style={{
-            willChange: 'transform',
-            transform: 'translateZ(0)',
-          }}
+          style={{ willChange: 'transform', transform: 'translateZ(0)' }}
         >
           <canvas
             ref={canvasRef}
             aria-hidden="true"
             className="absolute inset-0 w-full h-full"
-            style={{
-              imageRendering: 'auto',
-              opacity: 0.55,
-            }}
+            style={{ opacity: 0.5 }}
           />
         </div>
 
-        {/* Vignette — subtle depth */}
+        {/* Vignette */}
         <div
           className="absolute inset-0 z-[2] pointer-events-none"
           style={{
             background:
-              'radial-gradient(ellipse 70% 70% at 50% 50%, transparent 30%, #050505 100%)',
+              'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 35%, #050505 100%)',
           }}
         />
 
-        {/* Left gradient — text readability on desktop */}
+        {/* Left gradient for text readability — desktop */}
         <div
           className="absolute inset-0 z-[3] pointer-events-none hidden lg:block"
           style={{
             background:
-              'linear-gradient(90deg, #050505 0%, rgba(5,5,5,0.92) 20%, rgba(5,5,5,0.6) 40%, transparent 60%)',
+              'linear-gradient(90deg, #050505 0%, rgba(5,5,5,0.9) 22%, rgba(5,5,5,0.5) 42%, transparent 60%)',
           }}
         />
 
-        {/* Mobile gradient — top and bottom */}
+        {/* Mobile gradient */}
         <div
           className="absolute inset-0 z-[3] pointer-events-none lg:hidden"
           style={{
             background:
-              'linear-gradient(180deg, rgba(5,5,5,0.8) 0%, transparent 30%, transparent 50%, rgba(5,5,5,0.9) 75%, #050505 100%)',
+              'linear-gradient(180deg, rgba(5,5,5,0.75) 0%, transparent 30%, transparent 45%, rgba(5,5,5,0.88) 70%, #050505 100%)',
           }}
         />
 
-        {/* Text content — always visible, no animation */}
+        {/* Text — always visible */}
         <HeroContent />
 
         {/* Scroll hint */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 opacity-30">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 opacity-25">
           <span className="text-[10px] text-white font-mono tracking-[0.2em] uppercase">
             Scroll
           </span>
