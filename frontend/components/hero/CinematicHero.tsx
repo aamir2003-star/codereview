@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { HeroContent } from './HeroContent';
+import { KineticTextPreloader } from '@/components/ui/KineticTextPreloader';
 import { FRAME_COUNT, SCRUB_DISTANCE_VH, heroFrames, FRAME_WIDTH, FRAME_HEIGHT } from './frameConfig';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -30,8 +31,10 @@ export function CinematicHero() {
   const imagesRef = useRef<HTMLImageElement[]>([]);
   const readyRef = useRef(false);
   const lastProgressRef = useRef(-1);
-  const loaderRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<HTMLDivElement>(null);
+
+  const [isReady, setIsReady] = useState(false);
+  const [loadedCount, setLoadedCount] = useState(0);
 
   /** Smoothstep easing for morph feel */
   function smoothstep(t: number): number {
@@ -143,6 +146,7 @@ export function CinematicHero() {
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     let cancelled = false;
+    let count = 0;
 
     const images = heroFrames.map((src) => {
       const img = new Image();
@@ -155,23 +159,27 @@ export function CinematicHero() {
       images.map(
         (img) =>
           new Promise<void>((resolve) => {
-            if (img.complete && img.naturalWidth > 0) return resolve();
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
+            const onSingleLoad = () => {
+              count += 1;
+              if (!cancelled) {
+                setLoadedCount(count);
+              }
+              resolve();
+            };
+
+            if (img.complete && img.naturalWidth > 0) {
+              onSingleLoad();
+            } else {
+              img.onload = onSingleLoad;
+              img.onerror = onSingleLoad;
+            }
           }),
       ),
     ).then(() => {
       if (cancelled) return;
       imagesRef.current = images;
       readyRef.current = true;
-
-      if (loaderRef.current) {
-        loaderRef.current.style.opacity = '0';
-        setTimeout(() => {
-          if (loaderRef.current) loaderRef.current.style.display = 'none';
-        }, 400);
-      }
-
+      setIsReady(true);
       drawAtProgress(0);
     });
 
@@ -260,18 +268,12 @@ export function CinematicHero() {
         className="relative w-full overflow-hidden"
         style={{ minHeight: '100svh', background: '#050505' }}
       >
-        {/* Loader */}
-        <div
-          ref={loaderRef}
-          className="absolute inset-0 z-50 flex items-center justify-center bg-[#050505] transition-opacity duration-400"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <div className="h-8 w-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
-            <span className="text-[10px] text-white/25 font-mono tracking-[0.15em] uppercase">
-              Loading
-            </span>
-          </div>
-        </div>
+        {/* Kinetic Typographic Preloader */}
+        <KineticTextPreloader
+          isReady={isReady}
+          loadedCount={loadedCount}
+          totalCount={FRAME_COUNT}
+        />
 
         {/* Character canvas */}
         <div
