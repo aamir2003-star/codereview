@@ -4,7 +4,7 @@
  * drawn to canvas during scroll-driven playback.
  */
 
-export const FRAME_COUNT = 12;
+export const FRAME_COUNT = 11;
 
 export const heroFrames: string[] = Array.from({ length: FRAME_COUNT }, (_, i) => {
   const num = String(i + 1).padStart(2, '0');
@@ -12,7 +12,7 @@ export const heroFrames: string[] = Array.from({ length: FRAME_COUNT }, (_, i) =
 });
 
 /** Scroll distance multiplier (in viewport heights) for the pinned animation */
-export const SCRUB_DISTANCE_VH = 180;
+export const SCRUB_DISTANCE_VH = 120;
 
 /** Image native dimensions (all frames share the same size) */
 export const FRAME_WIDTH = 1086;

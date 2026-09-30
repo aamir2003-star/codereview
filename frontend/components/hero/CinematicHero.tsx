@@ -9,20 +9,19 @@ import { FRAME_COUNT, SCRUB_DISTANCE_VH, heroFrames, FRAME_WIDTH, FRAME_HEIGHT }
 gsap.registerPlugin(ScrollTrigger);
 
 /**
- * CinematicHero — scroll-driven canvas animation with frame crossfading.
+ * CinematicHero — scroll-driven canvas animation with morph transitions.
  *
- * SMOOTHNESS STRATEGY:
- * With 12 images, hard-switching frames feels choppy. Instead we treat
- * the progress as a continuous float (e.g. 3.7) and alpha-blend between
- * frame 3 and frame 4 at 70% opacity. This gives the illusion of many
- * more frames — effectively infinite interpolation.
+ * MORPH STRATEGY:
+ * Between any two adjacent frames we apply:
+ *  1. Eased blend curve (smoothstep) so transition accelerates in and
+ *     decelerates out — the eye lingers on key poses.
+ *  2. A subtle canvas filter blur that peaks at mid-transition (blend=0.5)
+ *     and is zero on clean frames. This simulates motion blur and gives
+ *     the brain a "morph" perception instead of a dissolve.
+ *  3. Micro-scale interpolation — the image scales ~1% during transition,
+ *     adding subtle perceived motion even when pixel content is similar.
  *
- * PERFORMANCE:
- * - Zero React state during scroll
- * - Direct canvas draws inside GSAP onUpdate
- * - scrub: true for 1:1 scroll mapping
- * - alpha:false canvas for GPU fast path
- * - Compositor layer via will-change + translateZ
+ * Result: 11 images feel like a continuous video.
  */
 export function CinematicHero() {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -34,15 +33,19 @@ export function CinematicHero() {
   const loaderRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<HTMLDivElement>(null);
 
+  /** Smoothstep easing for morph feel */
+  function smoothstep(t: number): number {
+    return t * t * (3 - 2 * t);
+  }
+
   /* ------------------------------------------------------------------ */
-  /*  Draw with crossfade between adjacent frames                        */
+  /*  Draw with morph transition                                         */
   /* ------------------------------------------------------------------ */
   function drawAtProgress(progress: number) {
     const canvas = canvasRef.current;
     if (!canvas || !readyRef.current) return;
 
-    // Skip if progress hasn't meaningfully changed
-    if (Math.abs(progress - lastProgressRef.current) < 0.001) return;
+    if (Math.abs(progress - lastProgressRef.current) < 0.0005) return;
     lastProgressRef.current = progress;
 
     const ctx = canvas.getContext('2d');
@@ -59,70 +62,84 @@ export function CinematicHero() {
       canvas.height = backH;
     }
 
-    // Background fill
+    // Background
     ctx.fillStyle = '#050505';
     ctx.fillRect(0, 0, backW, backH);
 
-    // Continuous float position: 0.0 → 11.0
+    // Continuous float position: 0.0 → (FRAME_COUNT-1)
     const floatIdx = progress * (FRAME_COUNT - 1);
     const idxA = Math.floor(floatIdx);
     const idxB = Math.min(idxA + 1, FRAME_COUNT - 1);
-    const blend = floatIdx - idxA; // 0–1 fraction between frames
+    const rawBlend = floatIdx - idxA;
+
+    // Smoothstep easing on blend for morph feel
+    const blend = smoothstep(rawBlend);
 
     const imgA = imagesRef.current[idxA];
     const imgB = imagesRef.current[idxB];
     if (!imgA) return;
 
-    // CONTAIN fit — show full character, never crop
+    // CONTAIN fit
     const imgAspect = FRAME_WIDTH / FRAME_HEIGHT;
     const canvasAspect = backW / backH;
 
     let drawW: number, drawH: number;
     if (canvasAspect > imgAspect) {
-      // Canvas wider than image — fit by height
       drawH = backH;
       drawW = drawH * imgAspect;
     } else {
-      // Canvas taller — fit by width
       drawW = backW;
       drawH = drawW / imgAspect;
     }
 
-    // Position: center-right on desktop, centered on mobile
+    // Micro-scale: 1.005× at mid-transition, 1.0× at clean frames
+    const microScale = 1 + 0.005 * Math.sin(blend * Math.PI);
+    const scaledW = drawW * microScale;
+    const scaledH = drawH * microScale;
+
+    // Position: center-right desktop, centered mobile
     const isMobile = dispW < 768;
     let xOff: number;
     if (isMobile) {
-      xOff = (backW - drawW) / 2;
+      xOff = (backW - scaledW) / 2;
     } else {
-      // Push character to the right ~60% mark
-      xOff = backW * 0.35 - drawW * 0.15;
-      // Clamp so character doesn't go off-screen right
-      xOff = Math.min(xOff, backW - drawW);
+      xOff = backW * 0.35 - scaledW * 0.15;
+      xOff = Math.min(xOff, backW - scaledW);
       xOff = Math.max(xOff, 0);
     }
+    const yOff = backH - scaledH;
 
-    // Align bottom of character to bottom of canvas
-    const yOff = backH - drawH;
+    // Motion blur: peaks at mid-transition, zero on clean frames
+    // sin(blend * PI) gives 0→1→0 curve, peak at blend=0.5
+    const blurAmount = 2.5 * Math.sin(rawBlend * Math.PI);
 
-    // Draw frame A
-    if (blend < 0.01 || idxA === idxB) {
-      // No blending needed — single frame
-      ctx.globalAlpha = 1;
-      ctx.drawImage(imgA, xOff, yOff, drawW, drawH);
+    if (blurAmount > 0.2) {
+      ctx.filter = `blur(${blurAmount}px)`;
     } else {
-      // Crossfade: draw A at (1-blend), then B at blend on top
+      ctx.filter = 'none';
+    }
+
+    if (rawBlend < 0.01 || idxA === idxB) {
+      // Clean frame — no blending
       ctx.globalAlpha = 1;
-      ctx.drawImage(imgA, xOff, yOff, drawW, drawH);
+      ctx.drawImage(imgA, xOff, yOff, scaledW, scaledH);
+    } else {
+      // Morph: draw A, then overlay B with eased alpha
+      ctx.globalAlpha = 1;
+      ctx.drawImage(imgA, xOff, yOff, scaledW, scaledH);
 
       ctx.globalAlpha = blend;
-      ctx.drawImage(imgB!, xOff, yOff, drawW, drawH);
+      ctx.drawImage(imgB!, xOff, yOff, scaledW, scaledH);
 
       ctx.globalAlpha = 1;
     }
+
+    // Reset filter
+    ctx.filter = 'none';
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Preload all images                                                  */
+  /*  Preload                                                             */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     let cancelled = false;
@@ -148,7 +165,6 @@ export function CinematicHero() {
       imagesRef.current = images;
       readyRef.current = true;
 
-      // Hide loader
       if (loaderRef.current) {
         loaderRef.current.style.opacity = '0';
         setTimeout(() => {
@@ -163,7 +179,7 @@ export function CinematicHero() {
   }, []);
 
   /* ------------------------------------------------------------------ */
-  /*  Reduced motion — show final frame                                   */
+  /*  Reduced motion fallback                                             */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -206,12 +222,11 @@ export function CinematicHero() {
         },
       });
 
-      // Subtle 3D parallax on the character wrapper
       if (character) {
         tl.fromTo(
           character,
-          { scale: 1.03, y: 8 },
-          { scale: 1.0, y: -8, ease: 'none' },
+          { scale: 1.03, y: 6 },
+          { scale: 1.0, y: -6, ease: 'none' },
           0,
         );
       }
@@ -221,7 +236,7 @@ export function CinematicHero() {
   }, []);
 
   /* ------------------------------------------------------------------ */
-  /*  Resize → redraw at current progress                                 */
+  /*  Resize                                                              */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -229,7 +244,7 @@ export function CinematicHero() {
 
     const ro = new ResizeObserver(() => {
       const cur = lastProgressRef.current;
-      lastProgressRef.current = -1; // force redraw
+      lastProgressRef.current = -1;
       if (readyRef.current && cur >= 0) {
         requestAnimationFrame(() => drawAtProgress(cur));
       }
@@ -245,7 +260,7 @@ export function CinematicHero() {
         className="relative w-full overflow-hidden"
         style={{ minHeight: '100svh', background: '#050505' }}
       >
-        {/* Loading overlay */}
+        {/* Loader */}
         <div
           ref={loaderRef}
           className="absolute inset-0 z-50 flex items-center justify-center bg-[#050505] transition-opacity duration-400"
@@ -258,7 +273,7 @@ export function CinematicHero() {
           </div>
         </div>
 
-        {/* Character canvas with 3D parallax container */}
+        {/* Character canvas */}
         <div
           ref={characterRef}
           className="absolute inset-0 z-[1]"
@@ -276,17 +291,15 @@ export function CinematicHero() {
         <div
           className="absolute inset-0 z-[2] pointer-events-none"
           style={{
-            background:
-              'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 35%, #050505 100%)',
+            background: 'radial-gradient(ellipse 75% 75% at 50% 50%, transparent 35%, #050505 100%)',
           }}
         />
 
-        {/* Left gradient for text readability — desktop */}
+        {/* Left gradient — desktop */}
         <div
           className="absolute inset-0 z-[3] pointer-events-none hidden lg:block"
           style={{
-            background:
-              'linear-gradient(90deg, #050505 0%, rgba(5,5,5,0.9) 22%, rgba(5,5,5,0.5) 42%, transparent 60%)',
+            background: 'linear-gradient(90deg, #050505 0%, rgba(5,5,5,0.9) 22%, rgba(5,5,5,0.5) 42%, transparent 60%)',
           }}
         />
 
@@ -294,8 +307,7 @@ export function CinematicHero() {
         <div
           className="absolute inset-0 z-[3] pointer-events-none lg:hidden"
           style={{
-            background:
-              'linear-gradient(180deg, rgba(5,5,5,0.75) 0%, transparent 30%, transparent 45%, rgba(5,5,5,0.88) 70%, #050505 100%)',
+            background: 'linear-gradient(180deg, rgba(5,5,5,0.75) 0%, transparent 30%, transparent 45%, rgba(5,5,5,0.88) 70%, #050505 100%)',
           }}
         />
 
