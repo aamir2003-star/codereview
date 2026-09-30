@@ -2,11 +2,18 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { LogOut, LayoutDashboard, GitFork } from 'lucide-react';
+import { LogOut, LayoutDashboard, GitFork, Home } from 'lucide-react';
 
 export function Navbar() {
   const { user, login, logout, isLoading } = useAuth();
+  const pathname = usePathname();
+
+  // On home page → show "Dashboard"; on any other page → show "Home"
+  const isHomePage = pathname === '/';
+  const navLink = isHomePage ? '/dashboard' : '/';
+  const navLabel = isHomePage ? 'Dashboard' : 'Home';
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-[#262626] bg-black/85 backdrop-blur-xl">
@@ -34,9 +41,9 @@ export function Navbar() {
             <div className="h-8 w-24 animate-pulse bg-[#141414] rounded-lg border border-[#262626]" />
           ) : user ? (
             <div className="flex items-center gap-3">
-              <Link href="/dashboard">
+              <Link href={navLink}>
                 <button className="h-8 px-4 rounded-lg border border-[#3a3a3a] hover:border-white bg-transparent text-white text-xs font-medium transition-all cursor-pointer">
-                  Dashboard
+                  {navLabel}
                 </button>
               </Link>
 
