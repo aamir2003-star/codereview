@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface LuxuryPreloaderProps {
   progress?: number;
@@ -10,6 +10,14 @@ interface LuxuryPreloaderProps {
   size?: 'sm' | 'md' | 'lg' | 'fullscreen';
 }
 
+const PHRASES = [
+  'INITIALIZING NEURAL AST ENGINE',
+  'SYNTHESIZING SYSTEM TOPOLOGY',
+  'COMPILING MULTI-LANGUAGE VECTORS',
+  'CALIBRATING 60FPS CINEMATIC MATRIX',
+  'REVIEW COPILOT // SYSTEM READY',
+];
+
 export function LuxuryPreloader({
   progress,
   stage = 'INITIALIZING NEURAL ENGINE',
@@ -17,139 +25,104 @@ export function LuxuryPreloader({
   size = 'md',
 }: LuxuryPreloaderProps) {
   const isFullscreen = size === 'fullscreen';
+  const [phraseIndex, setPhraseIndex] = useState(0);
 
-  const containerClasses = isFullscreen
-    ? 'fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-2xl text-white'
-    : 'flex flex-col items-center justify-center p-8 text-white';
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPhraseIndex((prev) => (prev + 1) % PHRASES.length);
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
 
-  const circleSize = size === 'sm' ? 80 : size === 'lg' || isFullscreen ? 160 : 120;
-  const strokeWidth = 1.5;
-  const radius = (circleSize - strokeWidth * 6) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset =
-    progress !== undefined ? circumference - (progress / 100) * circumference : circumference * 0.35;
+  const displayedText = stage || PHRASES[phraseIndex];
 
-  return (
-    <div className={containerClasses}>
-      {/* Precision Mechanical Gyro Core */}
-      <div className="relative flex items-center justify-center" style={{ width: circleSize, height: circleSize }}>
-        {/* Outermost Precision Stator Track */}
-        <svg
-          className="absolute inset-0 block h-full w-full"
-          viewBox={`0 0 ${circleSize} ${circleSize}`}
-        >
-          {/* Background Hairline Track */}
-          <circle
-            cx={circleSize / 2}
-            cy={circleSize / 2}
-            r={radius}
-            fill="none"
-            stroke="#1f1f1f"
-            strokeWidth={strokeWidth}
-          />
-          {/* Tick marks around track */}
-          {Array.from({ length: 24 }).map((_, i) => {
-            const angle = (i * 360) / 24;
-            const isMajor = i % 6 === 0;
-            return (
-              <line
-                key={i}
-                x1={circleSize / 2}
-                y1={4}
-                x2={circleSize / 2}
-                y2={isMajor ? 10 : 7}
-                stroke={isMajor ? '#ffffff' : '#333333'}
-                strokeWidth={isMajor ? 1.5 : 1}
-                transform={`rotate(${angle} ${circleSize / 2} ${circleSize / 2})`}
-              />
-            );
-          })}
-
-          {/* Active Dynamic Progress Ring */}
-          <motion.circle
-            cx={circleSize / 2}
-            cy={circleSize / 2}
-            r={radius}
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth={strokeWidth + 0.5}
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            transform={`rotate(-90 ${circleSize / 2} ${circleSize / 2})`}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-          />
-        </svg>
-
-        {/* Middle Gyro Ring (Counter Clockwise) */}
-        <motion.div
-          animate={{ rotate: -360 }}
-          transition={{ duration: 16, repeat: Infinity, ease: 'linear' }}
-          className="absolute rounded-full border border-dashed border-[#3a3a3a]"
-          style={{ width: circleSize * 0.72, height: circleSize * 0.72 }}
-        />
-
-        {/* Inner Laser Ring (Clockwise) */}
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 9, repeat: Infinity, ease: 'linear' }}
-          className="absolute rounded-full border border-[#262626]"
-          style={{ width: circleSize * 0.48, height: circleSize * 0.48 }}
-        >
-          {/* Orbiting Laser Point */}
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-white shadow-[0_0_10px_#ffffff]" />
-        </motion.div>
-
-        {/* Center Tachometer Core */}
-        <div className="relative z-10 flex flex-col items-center justify-center font-mono">
-          {progress !== undefined ? (
-            <div className="flex items-baseline">
-              <span className="text-xl sm:text-2xl font-normal tracking-tight text-white">
-                {Math.round(progress)}
-              </span>
-              <span className="text-[10px] text-[#999999] ml-0.5">%</span>
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#050505] p-8 sm:p-12 text-white select-none">
+        {/* Top Telemetry Header */}
+        <div className="w-full max-w-5xl flex items-center justify-between text-[11px] font-mono text-[#71717a] border-b border-white/[0.06] pb-4">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#007acc] animate-ping" />
+            <span className="text-white font-medium tracking-wider">REVIEWCOPILOT // TELEMETRY</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-6 text-[#52525b]">
+            <span>LATENCY: 0.4MS</span>
+            <span>RENDER: 60FPS</span>
+          </div>
+          {progress !== undefined && (
+            <div className="text-white font-mono font-medium">
+              [{String(Math.round(progress)).padStart(3, '0')}%]
             </div>
-          ) : (
-            <motion.div
-              animate={{ scale: [1, 1.25, 1], opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-              className="h-2.5 w-2.5 rounded-full bg-white shadow-[0_0_12px_#ffffff]"
-            />
           )}
         </div>
-      </div>
 
-      {/* Machined Status Typography */}
-      <div className="mt-6 text-center space-y-1.5 max-w-sm">
-        <div className="font-mono text-[11px] uppercase tracking-[3px] text-white font-normal">
-          {stage}
-        </div>
-        {subtext && (
-          <div className="font-serif text-xs text-[#999999] italic">
-            {subtext}
+        {/* Central Kinetic Block */}
+        <div className="my-auto flex flex-col items-center text-center space-y-5 max-w-xl w-full">
+          <div className="font-mono text-xs uppercase tracking-[0.3em] text-[#a1a1aa]">
+            Autonomous Code Intelligence
           </div>
-        )}
-      </div>
 
-      {/* Bottom Minimalist Running Frequency Bar */}
-      <div className="mt-4 flex items-center gap-1">
-        {Array.from({ length: 5 }).map((_, idx) => (
-          <motion.div
-            key={idx}
-            animate={{
-              scaleY: [0.3, 1, 0.3],
-              opacity: [0.2, 0.8, 0.2],
-            }}
-            transition={{
-              duration: 1.2,
-              repeat: Infinity,
-              delay: idx * 0.18,
-              ease: 'easeInOut',
-            }}
-            className="w-0.5 h-3 bg-white"
-          />
-        ))}
+          <div className="h-10 flex items-center justify-center overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={displayedText}
+                initial={{ y: 15, opacity: 0, filter: 'blur(4px)' }}
+                animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
+                exit={{ y: -15, opacity: 0, filter: 'blur(4px)' }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="font-mono text-sm sm:text-base font-medium tracking-wider text-white"
+              >
+                <span className="text-[#007acc] mr-2.5">▶</span>
+                {displayedText}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {progress !== undefined && (
+            <div className="relative w-64 sm:w-80 h-[2px] bg-white/[0.08] rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-transparent via-[#007acc] to-white shadow-[0_0_10px_#007acc]"
+                style={{ width: `${progress}%` }}
+                transition={{ ease: 'easeOut', duration: 0.2 }}
+              />
+            </div>
+          )}
+
+          {subtext && (
+            <div className="font-mono text-[10px] text-[#71717a] tracking-widest pt-1">
+              {subtext}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Footer */}
+        <div className="w-full max-w-5xl flex items-center justify-between text-[10px] font-mono text-[#52525b] border-t border-white/[0.06] pt-4">
+          <span className="text-white/40">[+] KINETIC_RUNNER</span>
+          <span className="text-white/40">STANDBY_OK</span>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 space-y-4 text-white">
+      <div className="flex items-center gap-2 font-mono text-xs text-white">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#007acc] animate-ping" />
+        <span>{displayedText}</span>
+      </div>
+      {progress !== undefined && (
+        <div className="relative w-48 h-[2px] bg-white/[0.08] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-transparent via-[#007acc] to-white"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+      {subtext && (
+        <div className="font-mono text-[10px] text-[#71717a]">
+          {subtext}
+        </div>
+      )}
     </div>
   );
 }
