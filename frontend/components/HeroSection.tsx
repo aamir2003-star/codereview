@@ -55,7 +55,7 @@ export function HeroSection() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#262626] bg-[#0d0d0d] text-white">
               <span className="h-1.5 w-1.5 rounded-full bg-[#007acc] shadow-[0_0_6px_#007acc]" />
               <span className="text-xs text-[#a1a1aa] font-medium">
-                AI Code Review &amp; Architecture Engine
+                Multi-Language Code Review &amp; PR Architecture
               </span>
             </div>
 
@@ -66,7 +66,7 @@ export function HeroSection() {
 
             {/* Body copy */}
             <p className="text-base sm:text-lg text-[#a1a1aa] leading-relaxed max-w-xl">
-              Connect your GitHub repository. ReviewCopilot synthesizes high-level system architecture, maps component impact, and traces subtle logic bugs across pull request diffs in real-time.
+              Connect your GitHub repository. ReviewCopilot inspects unified diffs across 50+ languages, synthesizes high-level PR system architecture, and isolates security vulnerabilities and logic bugs with drop-in fixes.
             </p>
 
             {/* CTAs */}
@@ -90,24 +90,24 @@ export function HeroSection() {
 
               <a href="#features">
                 <button className="h-11 px-5 rounded-xl border border-[#3a3a3a] hover:border-white bg-transparent text-[#d4d4d8] hover:text-white text-sm font-medium transition-all cursor-pointer">
-                  Explore Capabilities
+                  View Supported Languages
                 </button>
               </a>
             </div>
 
-            {/* Spec Row */}
+            {/* Verified Capabilities Row */}
             <div className="pt-8 border-t border-[#262626] grid grid-cols-3 gap-6 text-xs">
               <div className="space-y-0.5">
-                <span className="text-2xl font-bold font-mono tracking-tight text-white">&lt; 3s</span>
-                <p className="text-xs text-[#71717a]">Streaming Speed</p>
+                <span className="text-2xl font-bold font-mono tracking-tight text-white">50+</span>
+                <p className="text-xs text-[#71717a]">Languages &amp; IaC</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-2xl font-bold font-mono tracking-tight text-white">4-Tier</span>
-                <p className="text-xs text-[#71717a]">Severity Triage</p>
+                <span className="text-2xl font-bold font-mono tracking-tight text-white">OWASP</span>
+                <p className="text-xs text-[#71717a]">Security &amp; Logic Bugs</p>
               </div>
               <div className="space-y-0.5">
-                <span className="text-2xl font-bold font-mono tracking-tight text-white">CodeRabbit</span>
-                <p className="text-xs text-[#71717a]">AST Topology</p>
+                <span className="text-2xl font-bold font-mono tracking-tight text-white">PR System</span>
+                <p className="text-xs text-[#71717a]">Architecture &amp; Flow</p>
               </div>
             </div>
           </motion.div>
