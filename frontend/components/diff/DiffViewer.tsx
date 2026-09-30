@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { FileDiff, PullRequest } from '@/lib/api';
 import { PersistedComment, PersistedReview, PrArchitectureSummary } from '@/lib/review-api';
 import { useReviewSocket } from '@/hooks/useReviewSocket';
-import { PresenceIndicator } from '@/components/presence/PresenceIndicator';
 import { PrArchitectureViewer } from '@/components/review/PrArchitectureViewer';
 import {
   highlightVsCodeSyntax,
@@ -305,8 +304,6 @@ export function DiffViewer({
           </div>
 
           <div className="flex items-center gap-3">
-            <PresenceIndicator users={activeUsers} currentUserId={userId} />
-
             {/* Review Controller Buttons */}
             {isStreaming || isReviewing ? (
               <div className="flex items-center gap-2.5">
