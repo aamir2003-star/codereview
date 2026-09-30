@@ -9,8 +9,8 @@ import {
   GitFork,
   CheckCircle2,
   Terminal,
-  Sparkles,
 } from 'lucide-react';
+import { highlightVsCodeSyntax } from '@/components/diff/VsCodeSyntaxHighlighter';
 
 export function HeroSection() {
   const { user, login } = useAuth();
@@ -53,7 +53,7 @@ export function HeroSection() {
           >
             {/* Pill Badge */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#262626] bg-[#0d0d0d] text-white">
-              <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_6px_#ffffff]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-[#007acc] shadow-[0_0_6px_#007acc]" />
               <span className="text-xs text-[#a1a1aa] font-medium">
                 AI Code Review &amp; Architecture Engine
               </span>
@@ -112,7 +112,7 @@ export function HeroSection() {
             </div>
           </motion.div>
 
-          {/* Right Column: 3D Holographic Interactive Terminal */}
+          {/* Right Column: 3D Holographic Interactive VS Code Terminal */}
           <div
             className="lg:col-span-6 [perspective:1400px]"
             onMouseMove={handleMouseMove}
@@ -124,60 +124,73 @@ export function HeroSection() {
                 rotateY,
                 transformStyle: 'preserve-3d',
               }}
-              className="relative rounded-2xl border border-[#262626] bg-[#0d0d0d] p-1.5 shadow-2xl transition-all duration-200"
+              className="relative rounded-xl border border-[#333333] bg-[#1e1e1e] p-0.5 shadow-2xl transition-all duration-200"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-[#262626] bg-[#141414] px-4 py-3 rounded-t-xl">
+              {/* VS Code Window Header */}
+              <div className="flex items-center justify-between border-b border-[#2d2d2d] bg-[#252526] px-4 py-2.5 rounded-t-xl">
                 <div className="flex items-center gap-3">
                   <div className="flex gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#3a3a3a]" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#3a3a3a]" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#3a3a3a]" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
                   </div>
-                  <span className="font-mono text-xs text-[#a1a1aa] flex items-center gap-1.5">
-                    <Terminal className="h-3.5 w-3.5 text-white" /> auth.controller.ts
+                  <span className="font-mono text-xs text-[#cccccc] flex items-center gap-1.5 ml-2">
+                    <Terminal className="h-3.5 w-3.5 text-[#007acc]" /> auth.controller.ts (Diff)
                   </span>
                 </div>
 
-                <span className="font-mono text-[11px] text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/30">
-                  AI Active
+                <span className="font-mono text-[11px] text-[#4ec9b0] bg-[#4ec9b0]/10 px-2 py-0.5 rounded border border-[#4ec9b0]/30">
+                  AST Active
                 </span>
               </div>
 
               {/* Code Diff Simulation View */}
-              <div className="p-4 font-mono text-xs space-y-1.5 bg-black rounded-b-xl leading-relaxed select-none">
-                <div className="text-[#71717a] text-[11px] pb-1">@@ -14,7 +14,9 @@ async function authenticateUser()</div>
-
-                <div className="text-[#a1a1aa] px-2"> const token = req.headers.authorization;</div>
-                <div className="bg-rose-950/20 text-rose-300 border-l-2 border-rose-500 px-2 py-0.5 rounded-r">
-                  {"- const user = await db.query(`SELECT * FROM users WHERE id = '${req.params.id}'`);"}
+              <div className="p-3 font-mono text-[12px] leading-5 bg-[#1e1e1e] rounded-b-xl select-none">
+                <div className="text-[#569cd6] text-[11px] pb-1.5 bg-[#252526] px-2 py-0.5 rounded border-l-2 border-[#007acc] mb-1">
+                  @@ -14,7 +14,9 @@ async function authenticateUser()
                 </div>
 
-                <div className="bg-emerald-950/20 text-emerald-300 border-l-2 border-emerald-500 px-2 py-0.5 rounded-r">
-                  + const user = await User.findById(req.params.id).select(&#39;-password&#39;);
+                <div className="flex items-start text-[#d4d4d4] px-1 py-0.5">
+                  <span className="w-8 shrink-0 text-[#858585] text-right pr-3 select-none text-[11px]">13</span>
+                  <span className="whitespace-pre">{highlightVsCodeSyntax('const token = req.headers.authorization;')}</span>
                 </div>
 
-                {/* AI Comment Card */}
-                <div className="my-2.5 rounded-lg border border-rose-500/30 bg-rose-950/20 p-3 text-white space-y-1">
-                  <div className="flex items-center justify-between gap-2 border-b border-rose-500/20 pb-1">
+                <div className="flex items-start bg-[#372326] border-l-[3px] border-[#f85149] px-1 py-0.5 text-[#d4d4d4]">
+                  <span className="w-8 shrink-0 text-[#858585] text-right pr-3 select-none text-[11px]">-</span>
+                  <span className="whitespace-pre">{highlightVsCodeSyntax("const user = await db.query(`SELECT * FROM users WHERE id = '${req.params.id}'`);")}</span>
+                </div>
+
+                <div className="flex items-start bg-[#203426] border-l-[3px] border-[#2ea043] px-1 py-0.5 text-[#d4d4d4]">
+                  <span className="w-8 shrink-0 text-[#858585] text-right pr-3 select-none text-[11px]">+</span>
+                  <span className="whitespace-pre">{highlightVsCodeSyntax("const user = await User.findById(req.params.id).select('-password');")}</span>
+                </div>
+
+                {/* AI Comment Card in VS Code Style */}
+                <div className="my-2.5 rounded border border-[#f85149]/40 bg-[#251f22] p-3 text-white space-y-1">
+                  <div className="flex items-center justify-between gap-2 border-b border-[#333333] pb-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">
+                      <span className="font-mono text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#f85149]/20 text-[#ff7b72] border border-[#f85149]/40">
                         Security
                       </span>
-                      <span className="text-[11px] font-mono text-[#a1a1aa]">Line 15</span>
+                      <span className="text-[11px] font-mono text-[#858585]">Line 15</span>
                     </div>
-                    <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
+                    <span className="text-[11px] text-[#4ec9b0] flex items-center gap-1 font-medium">
                       <CheckCircle2 className="h-3 w-3" /> Resolved
                     </span>
                   </div>
-                  <p className="text-xs text-[#e4e4e7] leading-normal pt-1 font-sans">
+                  <p className="text-xs text-[#d4d4d4] leading-normal pt-1 font-sans">
                     SQL injection vulnerability addressed by transitioning to parameterized Mongoose query.
                   </p>
                 </div>
 
-                <div className="text-[#a1a1aa] px-2"> if (!user) return res.status(404).send();</div>
-                <div className="bg-emerald-950/20 text-emerald-300 border-l-2 border-emerald-500 px-2 py-0.5 rounded-r">
-                  {'+ return res.status(200).json({ success: true, user });'}
+                <div className="flex items-start text-[#d4d4d4] px-1 py-0.5">
+                  <span className="w-8 shrink-0 text-[#858585] text-right pr-3 select-none text-[11px]">16</span>
+                  <span className="whitespace-pre">{highlightVsCodeSyntax('if (!user) return res.status(404).send();')}</span>
+                </div>
+
+                <div className="flex items-start bg-[#203426] border-l-[3px] border-[#2ea043] px-1 py-0.5 text-[#d4d4d4]">
+                  <span className="w-8 shrink-0 text-[#858585] text-right pr-3 select-none text-[11px]">+</span>
+                  <span className="whitespace-pre">{highlightVsCodeSyntax('return res.status(200).json({ success: true, user });')}</span>
                 </div>
               </div>
             </motion.div>
