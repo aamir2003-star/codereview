@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/lib/auth-context';
-import { ThreeDCanvas } from '@/components/ui/ThreeDCanvas';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ReviewCopilot — Collaborative Real-Time AI Code Reviews',
-  description: 'AI-Powered Code Review Engine powered by Gemini 2.0 and live multiplayer Socket.io sync',
+  title: 'LŪMEN // ÍNDEX',
+  description: 'Liquid Assets. Luminous Returns. Private Banking & Ecosystem.',
 };
 
 export default function RootLayout({
@@ -15,11 +14,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark h-full antialiased">
-      <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100 font-sans relative overflow-x-hidden selection:bg-emerald-500/20 selection:text-emerald-300">
-        <ThreeDCanvas />
-        <div className="relative z-10 flex min-h-screen flex-col">
-          <AuthProvider>{children}</AuthProvider>
-        </div>
+      <head>
+        <link
+          href="https://db.onlinewebfonts.com/c/ca3d10781128664daddf89bf2e2d1305?family=Graphik+LCG+Regular+Regular"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-black text-white font-manrope relative overflow-x-hidden">
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
