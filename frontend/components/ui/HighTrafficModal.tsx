@@ -2,8 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle, Sparkles, RefreshCw, X, ShieldAlert, Cpu } from 'lucide-react';
+import { X, RefreshCw, AlertTriangle } from 'lucide-react';
 
 interface HighTrafficModalProps {
   isOpen: boolean;
@@ -24,73 +23,62 @@ export function HighTrafficModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl text-white">
         <motion.div
-          initial={{ opacity: 0, scale: 0.92, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.92, y: 20 }}
-          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-          className="relative w-full max-w-md overflow-hidden rounded-3xl border border-amber-500/40 bg-neutral-950/95 p-6 shadow-[0_0_50px_rgba(245,158,11,0.2)]"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.96 }}
+          transition={{ duration: 0.2 }}
+          className="relative w-full max-w-lg border border-[#262626] bg-black p-6 sm:p-8 rounded-none shadow-2xl space-y-6"
         >
-          {/* Ambient Glows */}
-          <div className="pointer-events-none absolute -top-20 -left-20 h-44 w-44 rounded-full bg-amber-500/15 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 -right-20 h-44 w-44 rounded-full bg-emerald-500/10 blur-3xl" />
-
-          {/* Close Button */}
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 rounded-xl p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-
-          <div className="flex flex-col items-center text-center">
-            {/* 3D Pulsing Icon */}
-            <div className="relative mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shadow-inner">
-              <motion.div
-                animate={{ scale: [1, 1.15, 1], opacity: [0.6, 1, 0.6] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute inset-0 rounded-2xl bg-amber-500/20 blur-md"
-              />
-              <Cpu className="relative h-8 w-8 text-amber-300" />
-            </div>
-
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>{isHighDemand ? 'AI Server High Traffic Spike' : 'AI Review Difficulty'}</span>
-            </h3>
-
-            <p className="mt-2 text-xs text-neutral-300 leading-relaxed max-w-sm">
-              {message ||
-                'Google Gemini AI servers are currently experiencing temporary high demand spikes. Demand spikes usually clear in a few seconds.'}
-            </p>
-
-            <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-[11px] text-neutral-400 text-left w-full font-mono flex items-start gap-2">
-              <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-              <span>
-                Your code is safe and intact. Clicking <strong>AI Review Again</strong> will re-connect via our automated fallback model matrix.
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-[#262626] pb-4">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#d4a017] shadow-[0_0_6px_#d4a017]" />
+              <span className="font-mono text-[11px] uppercase tracking-[3px] text-[#999999]">
+                {isHighDemand ? 'NEURAL ENGINE CONGESTION' : 'ANALYSIS RE-ROUTE'}
               </span>
             </div>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 flex items-center justify-center rounded-full border border-[#262626] hover:border-white text-[#999999] hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-            {/* Actions */}
-            <div className="mt-6 flex items-center gap-3 w-full">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="flex-1 border-neutral-800 bg-neutral-900/80 hover:bg-neutral-800 text-xs text-neutral-300"
-              >
-                Close
-              </Button>
-              <Button
-                onClick={() => {
-                  onClose();
-                  onRetry();
-                }}
-                className="flex-1 gap-2 bg-gradient-to-r from-amber-400 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-neutral-950 font-bold text-xs shadow-md shadow-amber-500/20"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span>AI Review Again</span>
-              </Button>
-            </div>
+          <div className="space-y-3">
+            <h3 className="font-display text-lg font-normal uppercase tracking-[2px] text-white">
+              Temporary Model Traffic Spike
+            </h3>
+            <p className="font-serif text-sm text-[#cccccc] leading-relaxed">
+              {message ||
+                'Google Gemini AI models are currently experiencing transient peak load spikes. The review engine will automatically fall back to alternative nodes.'}
+            </p>
+          </div>
+
+          <div className="p-4 border border-[#262626] bg-[#0d0d0d] font-mono text-xs text-[#999999] leading-relaxed">
+            Your repository diff is cached safely. Click below to re-initiate synthesis via the fallback matrix.
+          </div>
+
+          {/* Actions: Pill Buttons */}
+          <div className="flex items-center gap-4 pt-2">
+            <button
+              onClick={onClose}
+              className="flex-1 h-10 rounded-full border border-[#3a3a3a] hover:border-white bg-transparent text-white font-mono text-xs uppercase tracking-[2px] transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={() => {
+                onClose();
+                onRetry();
+              }}
+              className="flex-1 h-10 rounded-full border border-white hover:bg-white hover:text-black bg-transparent text-white font-mono text-xs uppercase tracking-[2.5px] transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>Retry Review</span>
+            </button>
           </div>
         </motion.div>
       </div>

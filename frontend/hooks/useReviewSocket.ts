@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
-import { PersistedComment } from '@/lib/review-api';
+import { PersistedComment, PrArchitectureSummary } from '@/lib/review-api';
 
 export interface PresenceUser {
   userId: string;
@@ -26,6 +26,7 @@ interface UseReviewSocketProps {
   onCommentUpvoted?: (data: { commentId: string; upvotes: string[] }) => void;
   onReviewComplete?: (data: { totalComments: number }) => void;
   onReviewError?: (data: { reviewId: string; message: string; isHighDemand?: boolean }) => void;
+  onArchitectureSummary?: (data: { reviewId: string; architecture: PrArchitectureSummary }) => void;
 }
 
 export function useReviewSocket({
@@ -36,6 +37,7 @@ export function useReviewSocket({
   onCommentUpvoted,
   onReviewComplete,
   onReviewError,
+  onArchitectureSummary,
 }: UseReviewSocketProps) {
   const [activeUsers, setActiveUsers] = useState<PresenceUser[]>([]);
   const [progress, setProgress] = useState<ReviewProgress | null>(null);
@@ -48,6 +50,7 @@ export function useReviewSocket({
     onCommentUpvoted,
     onReviewComplete,
     onReviewError,
+    onArchitectureSummary,
   });
 
   useEffect(() => {
@@ -57,6 +60,7 @@ export function useReviewSocket({
       onCommentUpvoted,
       onReviewComplete,
       onReviewError,
+      onArchitectureSummary,
     };
   });
 
@@ -91,6 +95,13 @@ export function useReviewSocket({
     const handleUpvoted = (data: { reviewId: string; commentId: string; upvotes: string[] }) => {
       if (data.reviewId === reviewId) {
         callbacksRef.current.onCommentUpvoted?.(data);
+      }
+    };
+
+    // Handle architecture summary live stream
+    const handleArchitecture = (data: { reviewId: string; architecture: PrArchitectureSummary }) => {
+      if (data.reviewId === reviewId) {
+        callbacksRef.current.onArchitectureSummary?.(data);
       }
     };
 
@@ -141,6 +152,7 @@ export function useReviewSocket({
     socket.on('comment:new', handleNewComment);
     socket.on('comment:resolved', handleResolved);
     socket.on('comment:upvoted', handleUpvoted);
+    socket.on('review:architecture', handleArchitecture);
     socket.on('review:progress', handleProgress);
     socket.on('review:complete', handleComplete);
     socket.on('review:error', handleError);
@@ -151,6 +163,7 @@ export function useReviewSocket({
       socket.off('comment:new', handleNewComment);
       socket.off('comment:resolved', handleResolved);
       socket.off('comment:upvoted', handleUpvoted);
+      socket.off('review:architecture', handleArchitecture);
       socket.off('review:progress', handleProgress);
       socket.off('review:complete', handleComplete);
       socket.off('review:error', handleError);

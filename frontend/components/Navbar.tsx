@@ -3,83 +3,77 @@
 import React from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { Button } from '@/components/ui/button';
-import { GitFork, Code2, Sparkles, LogOut, LayoutDashboard } from 'lucide-react';
+import { LogOut, LayoutDashboard, GitFork } from 'lucide-react';
 
 export function Navbar() {
   const { user, login, logout, isLoading } = useAuth();
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-neutral-800/60 bg-neutral-950/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-            <Code2 className="h-5 w-5 text-neutral-950" />
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-base font-bold tracking-tight text-white">ReviewCopilot</span>
-              <span className="flex items-center gap-0.5 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
-                <Sparkles className="h-2.5 w-2.5" /> AI Live
-              </span>
-            </div>
-          </div>
-        </Link>
+    <header className="sticky top-0 z-40 w-full border-b border-[#262626] bg-black/85 backdrop-blur-xl">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        {/* Left: Section / Brand Mark */}
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-3 group">
+            {/* Wordmark Display */}
+            <span className="font-display text-sm tracking-[6px] text-white font-normal uppercase select-none group-hover:text-[#e6e6e6] transition-colors">
+              REVIEW COPILOT
+            </span>
+          </Link>
+        </div>
 
-        {/* Navigation / Actions */}
-        <div className="flex items-center gap-3">
+        {/* Center / Monospace Architecture Indicator (hidden on small screens) */}
+        <div className="hidden md:flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_6px_#ffffff]" />
+          <span className="font-mono text-[11px] uppercase tracking-[3px] text-[#999999]">
+            PRECISION AI CODE AUDIT
+          </span>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-4">
           {isLoading ? (
-            <div className="h-9 w-24 animate-pulse rounded-xl bg-neutral-800" />
+            <div className="h-8 w-24 animate-pulse bg-[#141414] border border-[#262626]" />
           ) : user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <Link href="/dashboard">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                  <LayoutDashboard className="h-3.5 w-3.5" />
+                <button className="h-9 px-5 rounded-full border border-[#3a3a3a] hover:border-white bg-transparent text-white font-mono text-xs uppercase tracking-[2px] transition-all cursor-pointer">
                   Dashboard
-                </Button>
+                </button>
               </Link>
-              <div className="flex items-center gap-2.5 pl-2 border-l border-neutral-800">
+
+              <div className="flex items-center gap-3 pl-3 border-l border-[#262626]">
                 {user.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={user.avatarUrl}
                     alt={user.username}
-                    className="h-7 w-7 rounded-full ring-1 ring-neutral-700"
+                    className="h-6 w-6 rounded-full border border-[#3a3a3a]"
                   />
                 ) : (
-                  <div className="h-7 w-7 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-medium">
+                  <div className="h-6 w-6 rounded-full bg-[#141414] border border-[#3a3a3a] flex items-center justify-center font-mono text-[10px] text-white">
                     {user.username.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-xs font-medium text-neutral-300 hidden sm:inline-block">
-                  {user.username}
+                <span className="font-mono text-xs uppercase tracking-[1.5px] text-[#cccccc] hidden sm:inline-block">
+                  @{user.username}
                 </span>
 
-                {/* Prominent Log Out Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <button
                   onClick={logout}
-                  title="Sign out and disconnect GitHub session"
-                  className="h-8 gap-1.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 border border-transparent hover:border-rose-500/20 transition-colors"
+                  title="Sign Out"
+                  className="h-8 w-8 flex items-center justify-center rounded-full border border-[#262626] hover:border-white text-[#999999] hover:text-white transition-colors cursor-pointer"
                 >
                   <LogOut className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline-block">Log out</span>
-                </Button>
+                </button>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={login}
-                size="sm"
-                className="gap-2 text-xs font-semibold bg-white hover:bg-neutral-100 text-neutral-950 border-0 shadow-none"
-              >
-                <GitFork className="h-4 w-4" />
-                <span>Connect GitHub</span>
-              </Button>
-            </div>
+            <button
+              onClick={login}
+              className="h-9 px-6 rounded-full border border-white hover:bg-white hover:text-black bg-transparent text-white font-mono text-xs uppercase tracking-[2.5px] transition-all cursor-pointer"
+            >
+              Connect GitHub
+            </button>
           )}
         </div>
       </div>

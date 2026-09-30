@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileDiff, PullRequest } from '@/lib/api';
-import { PersistedComment, PersistedReview } from '@/lib/review-api';
+import { PersistedComment, PersistedReview, PrArchitectureSummary } from '@/lib/review-api';
 import { useReviewSocket } from '@/hooks/useReviewSocket';
 import { PresenceIndicator } from '@/components/presence/PresenceIndicator';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { PrArchitectureViewer } from '@/components/review/PrArchitectureViewer';
 import {
   FileCode,
   X,
@@ -16,17 +15,16 @@ import {
   Check,
   Layers,
   ChevronRight,
-  Loader2,
   ShieldAlert,
   Bug,
   Lightbulb,
   Info,
   ThumbsUp,
-  CheckCircle2,
-  Zap,
   RotateCw,
   Square,
   Copy,
+  Workflow,
+  Code2,
 } from 'lucide-react';
 import { HighTrafficModal } from '@/components/ui/HighTrafficModal';
 
@@ -58,10 +56,10 @@ const SEVERITY_ICONS = {
 };
 
 const SEVERITY_LABEL = {
-  security: 'Security',
-  bug: 'Bug',
-  smell: 'Code Smell',
-  nit: 'Nit',
+  security: 'SECURITY AUDIT',
+  bug: 'LOGIC FLAW',
+  smell: 'CODE SMELL',
+  nit: 'PRECISION NIT',
 };
 
 function CommentCardInline({
@@ -81,49 +79,49 @@ function CommentCardInline({
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -12, scale: 0.98 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-      className={`my-2 mx-3 rounded-xl p-3.5 border text-xs font-sans shadow-lg transition-all duration-200 backdrop-blur-md ${
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className={`my-3 mx-4 border p-4 text-xs font-mono rounded-none ${
         comment.resolved
-          ? 'bg-neutral-900/40 border-neutral-800 text-neutral-400 opacity-75'
+          ? 'bg-[#0d0d0d] border-[#262626] text-[#666666] opacity-75'
           : comment.severity === 'security'
-          ? 'bg-rose-950/40 border-rose-500/50 text-rose-200 shadow-rose-950/20'
+          ? 'bg-[#141414] border-white text-white'
           : comment.severity === 'bug'
-          ? 'bg-amber-950/40 border-amber-500/50 text-amber-200 shadow-amber-950/20'
-          : comment.severity === 'smell'
-          ? 'bg-yellow-950/40 border-yellow-500/50 text-yellow-200 shadow-yellow-950/20'
-          : 'bg-sky-950/40 border-sky-500/50 text-sky-200 shadow-sky-950/20'
+          ? 'bg-[#141414] border-[#d4a017] text-[#e6e6e6]'
+          : 'bg-[#141414] border-[#3a3a3a] text-[#cccccc]'
       }`}
     >
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <div className="flex items-center gap-2">
-          <Badge variant={comment.severity}>{SEVERITY_LABEL[comment.severity]}</Badge>
-          <span className="text-[11px] font-mono text-neutral-400">Line {comment.lineNumber}</span>
-          <span className="text-[10px] text-emerald-400/90 flex items-center gap-1 font-mono">
-            <Sparkles className="h-3 w-3" /> Gemini Flash AI
+      {/* Card Header */}
+      <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-[#262626]">
+        <div className="flex items-center gap-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-[1.5px] px-2 py-0.5 border border-[#3a3a3a] text-white">
+            {SEVERITY_LABEL[comment.severity]}
+          </span>
+          <span className="font-mono text-[10px] text-[#999999] tracking-wider">
+            LINE {comment.lineNumber}
           </span>
         </div>
         {comment.resolved && (
-          <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-semibold">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Resolved
+          <span className="font-mono text-[10px] uppercase tracking-[1.5px] text-white">
+            [RESOLVED]
           </span>
         )}
       </div>
 
-      <div className="flex items-start gap-2.5 mt-1">
-        <Icon className="h-4 w-4 shrink-0 mt-0.5" />
-        <p className="flex-1 leading-relaxed text-xs text-neutral-100 font-medium">{comment.message}</p>
+      {/* Message */}
+      <div className="flex items-start gap-2.5 my-2">
+        <Icon className="h-4 w-4 shrink-0 mt-0.5 text-white" />
+        <p className="font-serif text-sm text-[#e6e6e6] leading-relaxed flex-1">
+          {comment.message}
+        </p>
       </div>
 
       {/* Suggested Code Fix */}
       {comment.suggestedFix && (
-        <div className="mt-3 rounded-xl border border-emerald-500/30 bg-neutral-950/90 p-3 shadow-inner">
-          <div className="flex items-center justify-between text-[11px] font-mono text-emerald-400 mb-1.5 font-semibold">
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-              Suggested Fix
-            </span>
+        <div className="mt-3 border border-[#262626] bg-black p-3 rounded-none space-y-2">
+          <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-[2px] text-[#999999]">
+            <span>SUGGESTED CORRECTION</span>
             <button
               onClick={() => {
                 if (comment.suggestedFix) {
@@ -132,35 +130,35 @@ function CommentCardInline({
                   setTimeout(() => setCopied(false), 2000);
                 }
               }}
-              className="flex items-center gap-1 text-[10px] font-sans font-medium text-neutral-300 hover:text-emerald-300 transition-all bg-neutral-800/90 hover:bg-neutral-800 px-2 py-0.5 rounded-md border border-neutral-700/60 shadow-sm"
-              title="Copy code fix to clipboard"
+              className="h-6 px-3 rounded-full border border-[#3a3a3a] hover:border-white bg-transparent text-white font-mono text-[10px] uppercase tracking-[1.5px] transition-all cursor-pointer flex items-center gap-1"
             >
               {copied ? (
                 <>
-                  <Check className="h-3 w-3 text-emerald-400" />
-                  <span className="text-emerald-400 font-bold">Copied</span>
+                  <Check className="h-3 w-3 text-white" />
+                  <span>COPIED</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-3 w-3" />
-                  <span>Copy Fix</span>
+                  <span>COPY FIX</span>
                 </>
               )}
             </button>
           </div>
-          <pre className="text-[11px] font-mono text-emerald-200/90 bg-neutral-900/90 rounded-lg p-2.5 overflow-x-auto whitespace-pre border border-neutral-800/80 leading-relaxed selection:bg-emerald-500/30">
+          <pre className="text-xs font-mono text-white bg-[#0d0d0d] p-3 overflow-x-auto whitespace-pre border border-[#262626] leading-relaxed">
             {comment.suggestedFix}
           </pre>
         </div>
       )}
 
-      <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px]">
+      {/* Bottom Actions */}
+      <div className="mt-3 flex items-center justify-between pt-2 border-t border-[#262626]">
         <button
           onClick={() => onUpvote?.(comment._id)}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all ${
+          className={`h-7 px-3 rounded-full border font-mono text-[10px] uppercase tracking-[1.5px] transition-all flex items-center gap-1.5 cursor-pointer ${
             hasUpvoted
-              ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40 shadow-sm shadow-emerald-500/10'
-              : 'text-neutral-400 hover:text-emerald-300 hover:bg-neutral-800/60'
+              ? 'border-white bg-white text-black'
+              : 'border-[#3a3a3a] hover:border-white text-[#999999] hover:text-white bg-transparent'
           }`}
         >
           <ThumbsUp className="h-3 w-3" />
@@ -169,13 +167,9 @@ function CommentCardInline({
 
         <button
           onClick={() => onResolve?.(comment._id)}
-          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-            comment.resolved
-              ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-              : 'bg-neutral-800 hover:bg-emerald-600 hover:text-white text-neutral-200 shadow-sm'
-          }`}
+          className="h-7 px-4 rounded-full border border-[#3a3a3a] hover:border-white text-white font-mono text-[10px] uppercase tracking-[1.5px] bg-transparent transition-all cursor-pointer"
         >
-          {comment.resolved ? 'Reopen Issue' : 'Mark as Resolved'}
+          {comment.resolved ? 'REOPEN ISSUE' : 'MARK AS RESOLVED'}
         </button>
       </div>
     </motion.div>
@@ -201,8 +195,19 @@ export function DiffViewer({
   onCommentResolved,
   onCommentUpvoted,
 }: DiffViewerProps) {
+  const [activeTab, setActiveTab] = useState<'architecture' | 'diff'>('architecture');
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [reviewError, setReviewError] = useState<{ message: string; isHighDemand?: boolean } | null>(null);
+  const [localArchitecture, setLocalArchitecture] = useState<PrArchitectureSummary | undefined>(
+    currentReview?.architectureSummary
+  );
+
+  // Sync with currentReview architecture
+  React.useEffect(() => {
+    if (currentReview?.architectureSummary) {
+      setLocalArchitecture(currentReview.architectureSummary);
+    }
+  }, [currentReview?.architectureSummary]);
 
   // Socket.io Real-Time Streaming Hook
   const { activeUsers, progress, isStreaming } = useReviewSocket({
@@ -216,6 +221,9 @@ export function DiffViewer({
     },
     onCommentUpvoted: (data) => {
       onCommentUpvoted?.(data);
+    },
+    onArchitectureSummary: (data) => {
+      setLocalArchitecture(data.architecture);
     },
     onReviewError: (data) => {
       setReviewError({
@@ -269,7 +277,7 @@ export function DiffViewer({
   const diffLines = parsePatch(selectedFile?.patch);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 sm:p-6 lg:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-3 sm:p-6 text-white">
       {/* High Traffic / AI Error Pop-up Modal */}
       <HighTrafficModal
         isOpen={!!reviewError}
@@ -283,252 +291,267 @@ export function DiffViewer({
       />
 
       <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 15 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 15 }}
-        transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-        className="flex flex-col h-full max-h-[92vh] w-full max-w-6xl rounded-2xl border border-neutral-800 bg-neutral-950/95 shadow-[0_25px_80px_rgba(0,0,0,0.9)] overflow-hidden relative"
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.98 }}
+        transition={{ duration: 0.2 }}
+        className="flex flex-col h-full max-h-[94vh] w-full max-w-7xl border border-[#262626] bg-black rounded-none shadow-2xl overflow-hidden relative"
       >
-        {/* Animated Laser Scanning Line during review */}
-        {(isStreaming || isReviewing) && (
-          <motion.div
-            animate={{ y: ['0%', '100%', '0%'] }}
-            transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-            className="pointer-events-none absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_rgba(52,211,153,0.9)] z-40"
-          />
-        )}
-
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 bg-neutral-900/90 px-6 py-4 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-sm">
-              <GitPullRequest className="h-5 w-5" />
+        {/* Top Header */}
+        <div className="border-b border-[#262626] bg-[#0d0d0d] px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs uppercase tracking-[2px] px-2.5 py-0.5 border border-[#3a3a3a] text-white">
+                PR #{pr.number}
+              </span>
+              <h2 className="font-display text-base sm:text-lg font-normal uppercase tracking-[2px] text-white truncate max-w-xl">
+                {pr.title}
+              </h2>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold text-emerald-400">#{pr.number}</span>
-                <h2 className="text-sm font-bold text-white truncate max-w-md">{pr.title}</h2>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-neutral-400 font-mono mt-0.5">
-                <span>{files.length} files</span>
-                <span className="text-emerald-400">+{totalAdditions}</span>
-                <span className="text-rose-400">-{totalDeletions}</span>
-                {reviewComments.length > 0 && (
-                  <span className="text-amber-400 font-sans flex items-center gap-1 font-semibold">
-                    <Sparkles className="h-3 w-3" />
-                    {reviewComments.length} AI issues
-                  </span>
-                )}
-              </div>
+            <div className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[1.5px] text-[#999999]">
+              <span>{files.length} FILES</span>
+              <span className="text-white">+{totalAdditions}</span>
+              <span className="text-[#999999]">-{totalDeletions}</span>
+              {reviewComments.length > 0 && (
+                <span className="text-white border-l border-[#262626] pl-3">
+                  {reviewComments.length} AUDIT ISSUES
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Live Presence Avatars */}
+          <div className="flex items-center gap-4">
             <PresenceIndicator users={activeUsers} currentUserId={userId} />
 
+            {/* Review Controller Buttons */}
             {isStreaming || isReviewing ? (
-              <div className="flex items-center gap-2.5">
-                <div className="flex flex-col items-start gap-1 rounded-xl bg-neutral-900/95 border border-emerald-500/40 px-3.5 py-1.5 shadow-md shadow-emerald-500/10 backdrop-blur-md min-w-[230px]">
-                  <div className="flex items-center justify-between w-full gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                      <span className="font-mono text-xs font-bold text-emerald-300">
-                        Analyzing {progress?.percent ?? 15}%
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-neutral-400">
-                      {progress?.filesReviewed ?? 0}/{progress?.totalFiles ?? files.length} files
+              <div className="flex items-center gap-3">
+                <div className="border border-[#3a3a3a] bg-black px-4 py-2 rounded-none font-mono text-xs space-y-1 min-w-[200px]">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="uppercase tracking-[2px] text-white">
+                      AUDITING {progress?.percent ?? 15}%
+                    </span>
+                    <span className="text-[#999999]">
+                      {progress?.filesReviewed ?? 0}/{progress?.totalFiles ?? files.length}
                     </span>
                   </div>
-
-                  {/* Animated Continuous Progress Bar */}
-                  <div className="w-full h-1.5 rounded-full bg-neutral-950 overflow-hidden border border-neutral-800">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-                      initial={{ width: '8%' }}
-                      animate={{
-                        width: `${Math.max(8, Math.min(100, progress?.percent ?? 15))}%`,
-                      }}
-                      transition={{ ease: 'easeOut', duration: 0.4 }}
+                  <div className="w-full h-1 bg-[#141414] overflow-hidden">
+                    <div
+                      className="h-full bg-white transition-all duration-300"
+                      style={{ width: `${Math.max(5, progress?.percent ?? 15)}%` }}
                     />
                   </div>
-
-                  <span className="text-[10px] font-mono text-neutral-400 truncate max-w-[210px]">
-                    {progress?.stage || (progress?.currentFile ? `Scanning ${progress.currentFile}` : 'Neural engine active...')}
-                  </span>
+                  <div className="text-[10px] text-[#666666] uppercase truncate max-w-[180px]">
+                    {progress?.stage || 'NEURAL CORE ACTIVE'}
+                  </div>
                 </div>
 
                 {onStopReview && (
-                  <Button
+                  <button
                     onClick={onStopReview}
-                    size="sm"
-                    className="gap-1.5 bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 hover:text-rose-100 border border-rose-500/40 text-xs font-semibold px-3 py-2 rounded-xl shadow-sm transition-all h-full"
-                    title="Stop ongoing AI review"
+                    className="h-9 px-4 rounded-full border border-[#3a3a3a] hover:border-white bg-transparent text-white font-mono text-xs uppercase tracking-[2px] transition-all cursor-pointer flex items-center gap-1.5"
                   >
-                    <Square className="h-3 w-3 fill-current" />
-                    <span>Stop</span>
-                  </Button>
+                    <Square className="h-3 w-3 fill-white" />
+                    <span>ABORT</span>
+                  </button>
                 )}
               </div>
             ) : currentReview || reviewComments.length > 0 ? (
-              <div className="flex items-center gap-2.5">
-                <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
-                  <Check className="h-4 w-4" />
-                  Review complete ({reviewComments.length} issue{reviewComments.length === 1 ? '' : 's'})
-                </div>
-                <Button
-                  onClick={onStartReview}
-                  size="sm"
-                  className="gap-2 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 font-bold text-xs border border-emerald-500/40 hover:border-emerald-400 shadow-sm transition-all"
-                >
-                  <RotateCw className="h-3.5 w-3.5" />
-                  <span>AI Review Again</span>
-                </Button>
-              </div>
-            ) : (
-              <Button
+              <button
                 onClick={onStartReview}
-                size="sm"
-                className="gap-2 bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-neutral-950 font-bold text-xs shadow-md shadow-emerald-500/20"
+                className="h-9 px-5 rounded-full border border-white hover:bg-white hover:text-black bg-transparent text-white font-mono text-xs uppercase tracking-[2.5px] transition-all cursor-pointer flex items-center gap-2"
               >
-                <Sparkles className="h-4 w-4" />
-                Start Live AI Review
-              </Button>
+                <RotateCw className="h-3.5 w-3.5" />
+                <span>AI REVIEW AGAIN</span>
+              </button>
+            ) : (
+              <button
+                onClick={onStartReview}
+                className="h-9 px-6 rounded-full border border-white hover:bg-white hover:text-black bg-transparent text-white font-mono text-xs uppercase tracking-[2.5px] transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>START AI REVIEW</span>
+              </button>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
+
+            <button
               onClick={onClose}
-              className="h-8 w-8 text-neutral-400 hover:text-white"
+              className="h-8 w-8 flex items-center justify-center rounded-full border border-[#262626] hover:border-white text-[#999999] hover:text-white transition-colors cursor-pointer"
             >
-              <X className="h-5 w-5" />
-            </Button>
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
-        {/* Content Layout */}
-        <div className="flex flex-1 overflow-hidden divide-x divide-neutral-800/80">
-          {/* File Sidebar */}
-          <div className="w-72 bg-neutral-900/30 flex flex-col overflow-y-auto p-3 space-y-1">
-            <div className="px-3 py-2 text-[11px] font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Changed Files ({files.length})</span>
+        {/* Tab Selector: Architecture vs Diagnostic Diff */}
+        <div className="border-b border-[#262626] bg-black px-6 flex items-center gap-8">
+          <button
+            onClick={() => setActiveTab('architecture')}
+            className={`py-3.5 font-mono text-xs uppercase tracking-[2.5px] transition-all cursor-pointer relative ${
+              activeTab === 'architecture'
+                ? 'text-white font-medium'
+                : 'text-[#666666] hover:text-white'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Workflow className="h-3.5 w-3.5" />
+              ARCHITECTURE & PR OVERVIEW
+            </span>
+            {activeTab === 'architecture' && (
+              <div className="absolute bottom-0 inset-x-0 h-0.5 bg-white" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('diff')}
+            className={`py-3.5 font-mono text-xs uppercase tracking-[2.5px] transition-all cursor-pointer relative ${
+              activeTab === 'diff'
+                ? 'text-white font-medium'
+                : 'text-[#666666] hover:text-white'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Code2 className="h-3.5 w-3.5" />
+              DIAGNOSTIC DIFF & AUDIT ({reviewComments.length})
+            </span>
+            {activeTab === 'diff' && (
+              <div className="absolute bottom-0 inset-x-0 h-0.5 bg-white" />
+            )}
+          </button>
+        </div>
+
+        {/* Tab 1: Architecture View */}
+        {activeTab === 'architecture' ? (
+          <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-black">
+            <PrArchitectureViewer
+              architecture={localArchitecture}
+              isAnalyzing={isReviewing || isStreaming}
+            />
+          </div>
+        ) : (
+          /* Tab 2: Code Diff View */
+          <div className="flex flex-1 overflow-hidden divide-x divide-[#262626]">
+            {/* File Sidebar */}
+            <div className="w-80 bg-[#0d0d0d] flex flex-col overflow-y-auto divide-y divide-[#262626]">
+              <div className="p-4 font-mono text-[11px] uppercase tracking-[2px] text-[#999999] flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 text-white" />
+                <span>CHANGED FILES ({files.length})</span>
+              </div>
+
+              {isLoading ? (
+                <div className="p-4 space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-10 bg-[#141414] animate-pulse border border-[#262626]" />
+                  ))}
+                </div>
+              ) : (
+                files.map((file, idx) => {
+                  const isSelected = selectedFileIndex === idx;
+                  const fileComments = reviewComments.filter((c) => c.filePath === file.filename);
+                  const hasIssues = fileComments.length > 0;
+
+                  return (
+                    <button
+                      key={file.sha || idx}
+                      onClick={() => setSelectedFileIndex(idx)}
+                      className={`w-full flex items-center justify-between p-3.5 text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#141414] text-white border-l-2 border-white'
+                          : 'text-[#cccccc] hover:bg-black hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <FileCode className="h-3.5 w-3.5 shrink-0 text-white" />
+                        <span className="truncate font-mono text-xs uppercase tracking-wider">{file.filename}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2 font-mono text-[10px]">
+                        {hasIssues && (
+                          <span className="text-white px-1.5 py-0.2 border border-[#3a3a3a]">
+                            {fileComments.length}
+                          </span>
+                        )}
+                        <span className="text-white">+{file.additions}</span>
+                        <ChevronRight className={`h-3 w-3 ${isSelected ? 'text-white' : 'text-[#666666]'}`} />
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
 
-            {isLoading ? (
-              <div className="p-3 space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-10 rounded-lg bg-neutral-800/40 animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              files.map((file, idx) => {
-                const isSelected = selectedFileIndex === idx;
-                const fileComments = reviewComments.filter((c) => c.filePath === file.filename);
-                const hasIssues = fileComments.length > 0;
-
-                return (
-                  <button
-                    key={file.sha || idx}
-                    onClick={() => setSelectedFileIndex(idx)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-all ${
-                      isSelected
-                        ? 'bg-neutral-800 text-white font-semibold shadow-md border border-neutral-700'
-                        : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <FileCode className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                      <span className="truncate text-xs font-mono">{file.filename}</span>
+            {/* Diff Viewer Body */}
+            <div className="flex-1 flex flex-col bg-black overflow-hidden relative">
+              {selectedFile ? (
+                <>
+                  {/* File Header */}
+                  <div className="px-6 py-3 border-b border-[#262626] bg-[#0d0d0d] flex items-center justify-between font-mono text-xs uppercase tracking-wider">
+                    <div className="flex items-center gap-2 text-white">
+                      <span>{selectedFile.filename}</span>
+                      <span className="text-[#666666]">[{selectedFile.status}]</span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {hasIssues && (
-                        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/30 animate-pulse">
-                          {fileComments.length}
-                        </span>
-                      )}
-                      <span className="text-[10px] font-mono text-emerald-400">+{file.additions}</span>
-                      <ChevronRight className="h-3 w-3 text-neutral-500" />
+                    <div className="flex items-center gap-3">
+                      <span className="text-white">+{selectedFile.additions}</span>
+                      <span className="text-[#999999]">-{selectedFile.deletions}</span>
                     </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          {/* Diff Content Viewer */}
-          <div className="flex-1 flex flex-col bg-neutral-950 overflow-hidden relative">
-            {selectedFile ? (
-              <>
-                {/* File Header */}
-                <div className="px-6 py-3 border-b border-neutral-800/60 bg-neutral-900/40 flex items-center justify-between text-xs font-mono">
-                  <div className="flex items-center gap-2 text-neutral-300">
-                    <span className="font-bold text-white">{selectedFile.filename}</span>
-                    <span className="text-neutral-500">({selectedFile.status})</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-emerald-400 font-semibold">+{selectedFile.additions}</span>
-                    <span className="text-rose-400 font-semibold">-{selectedFile.deletions}</span>
+
+                  {/* Code Diff Lines */}
+                  <div className="flex-1 overflow-auto font-mono text-xs leading-relaxed select-text p-2">
+                    {diffLines.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center text-[#666666] p-8">
+                        <Check className="h-8 w-8 text-white mb-2" />
+                        <span className="font-mono text-xs uppercase tracking-[2px]">BINARY OR EMPTY FILE CHANGE</span>
+                      </div>
+                    ) : (
+                      <div>
+                        {diffLines.map((line) => {
+                          const inlineComments = commentsByLine[line.lineNum] ?? [];
+                          return (
+                            <React.Fragment key={line.id}>
+                              <div
+                                className={`flex items-start px-3 py-0.5 ${
+                                  line.type === 'add'
+                                    ? 'bg-[#141414] text-white border-l-2 border-white'
+                                    : line.type === 'delete'
+                                    ? 'bg-[#0d0d0d] text-[#999999] border-l-2 border-[#3a3a3a]'
+                                    : line.type === 'hunk'
+                                    ? 'bg-[#1a1a1a] text-[#cccccc] font-semibold py-1 border-l-2 border-[#666666]'
+                                    : 'text-[#cccccc]'
+                                }`}
+                              >
+                                <span className="w-10 shrink-0 text-[#666666] select-none text-[11px] pr-2 text-right">
+                                  {line.type !== 'hunk' && line.type !== 'delete' ? line.lineNum : ''}
+                                </span>
+                                <span className="whitespace-pre-wrap font-mono text-xs break-all">
+                                  {line.content}
+                                </span>
+                              </div>
+
+                              {/* Inline AI Comments */}
+                              {inlineComments.map((comment) => (
+                                <CommentCardInline
+                                  key={comment._id}
+                                  comment={comment}
+                                  onResolve={onResolve}
+                                  onUpvote={onUpvote}
+                                  currentUserId={userId}
+                                />
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-[#666666] font-mono text-xs uppercase tracking-[2px]">
+                  SELECT A FILE TO INSPECT ITS UNIFIED DIFF
                 </div>
-
-                {/* Code Diff Body */}
-                <div className="flex-1 overflow-auto font-mono text-xs leading-relaxed select-text p-1">
-                  {diffLines.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center text-neutral-400 p-8">
-                      <Check className="h-8 w-8 text-emerald-400 mb-2 opacity-60" />
-                      <p>Binary or empty file change</p>
-                    </div>
-                  ) : (
-                    <div>
-                      {diffLines.map((line) => {
-                        const inlineComments = commentsByLine[line.lineNum] ?? [];
-                        return (
-                          <React.Fragment key={line.id}>
-                            <div
-                              className={`flex items-start px-3 py-0.5 ${
-                                line.type === 'add'
-                                  ? 'bg-emerald-950/40 text-emerald-300 border-l-2 border-emerald-500'
-                                  : line.type === 'delete'
-                                  ? 'bg-rose-950/40 text-rose-300 border-l-2 border-rose-500'
-                                  : line.type === 'hunk'
-                                  ? 'bg-cyan-950/30 text-cyan-400 border-l-2 border-cyan-500 font-semibold py-1'
-                                  : 'text-neutral-300'
-                              }`}
-                            >
-                              <span className="w-10 shrink-0 text-neutral-500 select-none text-[11px] pr-2 text-right">
-                                {line.type !== 'hunk' && line.type !== 'delete' ? line.lineNum : ''}
-                              </span>
-                              <span className="whitespace-pre-wrap font-mono text-xs break-all">
-                                {line.content}
-                              </span>
-                            </div>
-
-                            {/* Inline AI comments with live Socket sync and spring entrance */}
-                            {inlineComments.map((comment) => (
-                              <CommentCardInline
-                                key={comment._id}
-                                comment={comment}
-                                onResolve={onResolve}
-                                onUpvote={onUpvote}
-                                currentUserId={userId}
-                              />
-                            ))}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full text-neutral-400 text-xs">
-                Select a file to inspect its diff
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </motion.div>
     </div>
   );

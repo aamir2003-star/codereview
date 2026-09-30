@@ -2,6 +2,22 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export type ReviewStatus = 'pending' | 'streaming' | 'done' | 'error';
 
+export interface PrArchitectureSummary {
+  highLevelSummary: string;
+  architectureOverview: string;
+  keyComponentsChanged: Array<{
+    component: string;
+    purpose: string;
+    impactLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  }>;
+  sequenceFlowOrDiagram?: string;
+  walkthrough: Array<{
+    file: string;
+    changes: string;
+  }>;
+  potentialRisks: string[];
+}
+
 export interface IReview extends Document {
   prUrl: string;
   owner: string;
@@ -13,6 +29,7 @@ export interface IReview extends Document {
   totalFiles: number;
   filesReviewed: number;
   totalComments: number;
+  architectureSummary?: PrArchitectureSummary;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +54,25 @@ const ReviewSchema = new Schema<IReview>(
     totalFiles: { type: Number, default: 0 },
     filesReviewed: { type: Number, default: 0 },
     totalComments: { type: Number, default: 0 },
+    architectureSummary: {
+      highLevelSummary: { type: String, default: '' },
+      architectureOverview: { type: String, default: '' },
+      keyComponentsChanged: [
+        {
+          component: { type: String, default: '' },
+          purpose: { type: String, default: '' },
+          impactLevel: { type: String, enum: ['HIGH', 'MEDIUM', 'LOW'], default: 'LOW' },
+        },
+      ],
+      sequenceFlowOrDiagram: { type: String, default: '' },
+      walkthrough: [
+        {
+          file: { type: String, default: '' },
+          changes: { type: String, default: '' },
+        },
+      ],
+      potentialRisks: [{ type: String }],
+    },
   },
   { timestamps: true }
 );

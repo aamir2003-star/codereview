@@ -107,14 +107,47 @@ export const reviewController = {
         console.log(`[Review] Starting review for ${owner}/${repo} #${pullNumber} (${filesToReview.length} files to review)`);
 
         // Emit initial progress starting point
-        const totalSteps = filesToReview.length * 3;
+        const totalSteps = filesToReview.length * 3 + 2;
 
         io?.to(`review:${reviewId}`).emit('review:progress', {
           reviewId,
           filesReviewed: 0,
           totalFiles: filesToReview.length,
           percent: 5,
-          stage: 'Initializing Gemini AI engine...',
+          stage: 'Synthesizing PR Architecture & System Impact...',
+          currentFile: 'Architecture Analysis',
+          totalComments: 0,
+        });
+
+        // Generate CodeRabbit-style PR Architecture & Walkthrough
+        try {
+          console.log(`[Review] Generating PR Architecture summary for #${pullNumber}...`);
+          const architectureSummary = await geminiService.generatePrArchitecture(
+            prTitle || `PR #${pullNumber}`,
+            '',
+            filesToReview.map((f) => ({
+              filename: f.filename,
+              patch: f.patch,
+              additions: f.additions,
+              deletions: f.deletions,
+            }))
+          );
+
+          await Review.findByIdAndUpdate(review._id, { architectureSummary });
+          io?.to(`review:${reviewId}`).emit('review:architecture', {
+            reviewId,
+            architecture: architectureSummary,
+          });
+        } catch (archErr) {
+          console.warn('[Review] Failed to generate architecture summary:', archErr);
+        }
+
+        io?.to(`review:${reviewId}`).emit('review:progress', {
+          reviewId,
+          filesReviewed: 0,
+          totalFiles: filesToReview.length,
+          percent: 15,
+          stage: 'Initializing deep line-by-line audit...',
           currentFile: filesToReview[0]?.filename || 'Starting analyzer...',
           totalComments: 0,
         });

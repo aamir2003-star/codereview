@@ -55,10 +55,10 @@ export function LivingCyberCanvas() {
     }> = [];
 
     const colors = [
-      'rgba(52, 211, 153, ', // emerald
-      'rgba(34, 211, 238, ', // cyan
-      'rgba(168, 85, 247, ', // purple
-      'rgba(59, 130, 246, ', // blue
+      'rgba(255, 255, 255, ', // pure white starlight
+      'rgba(195, 217, 243, ', // subtle ice-blue (link token)
+      'rgba(230, 230, 230, ', // body strong white
+      'rgba(153, 153, 153, ', // muted hairline white
     ];
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -66,13 +66,13 @@ export function LivingCyberCanvas() {
         x: (Math.random() - 0.5) * width * 1.5,
         y: (Math.random() - 0.5) * height * 1.5,
         z: Math.random() * 800 + 100,
-        baseRadius: Math.random() * 2.5 + 1.2,
+        baseRadius: Math.random() * 2.2 + 1.0,
         radius: 2,
         color: colors[Math.floor(Math.random() * colors.length)],
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
-        vz: (Math.random() - 0.5) * 0.6,
-        alpha: Math.random() * 0.6 + 0.2,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        vz: (Math.random() - 0.5) * 0.5,
+        alpha: Math.random() * 0.5 + 0.15,
       });
     }
 
@@ -87,28 +87,28 @@ export function LivingCyberCanvas() {
 
       // Subtle dynamic perspective mesh grid
       const gridFov = 400;
-      const mouseOffsetX = (mouse.x - width / 2) * 0.08;
-      const mouseOffsetY = (mouse.y - height / 2) * 0.08;
+      const mouseOffsetX = (mouse.x - width / 2) * 0.06;
+      const mouseOffsetY = (mouse.y - height / 2) * 0.06;
 
       ctx.save();
-      ctx.strokeStyle = 'rgba(52, 211, 153, 0.035)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+      ctx.lineWidth = 0.8;
 
       // Draw faint 3D cyber grid lines
       const horizonY = height * 0.65 + mouseOffsetY * 0.5;
-      for (let x = -width; x < width * 2; x += 120) {
+      for (let x = -width; x < width * 2; x += 140) {
         ctx.beginPath();
         ctx.moveTo(x + mouseOffsetX, height);
         ctx.lineTo(width / 2 + (x - width / 2) * 0.2 + mouseOffsetX * 0.2, horizonY);
         ctx.stroke();
       }
 
-      for (let y = height; y > horizonY; y -= 35) {
+      for (let y = height; y > horizonY; y -= 40) {
         const factor = (y - horizonY) / (height - horizonY);
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
-        ctx.strokeStyle = `rgba(34, 211, 238, ${0.04 * factor})`;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.03 * factor})`;
         ctx.stroke();
       }
       ctx.restore();
@@ -128,8 +128,8 @@ export function LivingCyberCanvas() {
         if (p.y > height) p.y = -height;
 
         const scale = gridFov / (gridFov + p.z);
-        const screenX = width / 2 + (p.x + (mouse.x - width / 2) * 0.2) * scale;
-        const screenY = height / 2 + (p.y + (mouse.y - height / 2) * 0.2) * scale;
+        const screenX = width / 2 + (p.x + (mouse.x - width / 2) * 0.18) * scale;
+        const screenY = height / 2 + (p.y + (mouse.y - height / 2) * 0.18) * scale;
         const screenRadius = p.baseRadius * scale * 2;
 
         if (screenX >= 0 && screenX <= width && screenY >= 0 && screenY <= height) {
@@ -143,7 +143,7 @@ export function LivingCyberCanvas() {
             screenRadius * 3
           );
           gradient.addColorStop(0, `${p.color}${p.alpha})`);
-          gradient.addColorStop(0.5, `${p.color}${p.alpha * 0.4})`);
+          gradient.addColorStop(0.5, `${p.color}${p.alpha * 0.3})`);
           gradient.addColorStop(1, `${p.color}0)`);
 
           ctx.fillStyle = gradient;
@@ -153,7 +153,7 @@ export function LivingCyberCanvas() {
 
           ctx.fillStyle = '#ffffff';
           ctx.beginPath();
-          ctx.arc(screenX, screenY, Math.max(0.8, screenRadius * 0.6), 0, Math.PI * 2);
+          ctx.arc(screenX, screenY, Math.max(0.7, screenRadius * 0.5), 0, Math.PI * 2);
           ctx.fill();
 
           // Connect nearby particles in 3D space
@@ -164,14 +164,14 @@ export function LivingCyberCanvas() {
             const dz = p.z - p2.z;
             const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (dist < 220) {
+            if (dist < 200) {
               const scale2 = gridFov / (gridFov + p2.z);
-              const screenX2 = width / 2 + (p2.x + (mouse.x - width / 2) * 0.2) * scale2;
-              const screenY2 = height / 2 + (p2.y + (mouse.y - height / 2) * 0.2) * scale2;
+              const screenX2 = width / 2 + (p2.x + (mouse.x - width / 2) * 0.18) * scale2;
+              const screenY2 = height / 2 + (p2.y + (mouse.y - height / 2) * 0.18) * scale2;
 
-              const lineAlpha = (1 - dist / 220) * 0.15;
-              ctx.strokeStyle = `rgba(52, 211, 153, ${lineAlpha})`;
-              ctx.lineWidth = 0.8;
+              const lineAlpha = (1 - dist / 200) * 0.1;
+              ctx.strokeStyle = `rgba(255, 255, 255, ${lineAlpha})`;
+              ctx.lineWidth = 0.6;
               ctx.beginPath();
               ctx.moveTo(screenX, screenY);
               ctx.lineTo(screenX2, screenY2);
@@ -194,17 +194,16 @@ export function LivingCyberCanvas() {
   }, []);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-      {/* Dynamic Ambient Aurora Glows */}
-      <div className="absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-emerald-500/10 blur-[120px] animate-pulse" />
-      <div className="absolute top-1/3 -right-20 h-96 w-96 rounded-full bg-cyan-500/10 blur-[130px]" />
-      <div className="absolute -bottom-32 left-1/3 h-96 w-96 rounded-full bg-emerald-600/5 blur-[140px]" />
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-black">
+      {/* Subtle Ambient Monochrome Depth */}
+      <div className="absolute -top-40 left-1/3 h-96 w-96 rounded-full bg-white/[0.02] blur-[150px]" />
+      <div className="absolute top-1/2 -right-20 h-96 w-96 rounded-full bg-[#c3d9f3]/[0.015] blur-[160px]" />
 
       {/* Cyber Living Canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
 
-      {/* Futuristic Scanline Overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.25)_51%)] bg-[length:100%_4px] opacity-30" />
+      {/* Fine Hairline Horizontal Atmosphere */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.4)_51%)] bg-[length:100%_4px] opacity-20" />
     </div>
   );
 }

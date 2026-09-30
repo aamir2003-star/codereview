@@ -158,4 +158,171 @@ export const geminiService = {
       );
     }
   },
+
+  /**
+   * Generates a CodeRabbit-style comprehensive architecture overview and PR explanation
+   */
+  async generatePrArchitecture(
+    prTitle: string,
+    prDescription: string,
+    files: Array<{ filename: string; patch?: string; additions?: number; deletions?: number }>
+  ): Promise<{
+    highLevelSummary: string;
+    architectureOverview: string;
+    keyComponentsChanged: Array<{
+      component: string;
+      purpose: string;
+      impactLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+    }>;
+    sequenceFlowOrDiagram?: string;
+    walkthrough: Array<{
+      file: string;
+      changes: string;
+    }>;
+    potentialRisks: string[];
+  }> {
+    if (!config.geminiApiKey) {
+      throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+
+    const fileSummary = files
+      .map((f) => {
+        const snippet = f.patch ? f.patch.slice(0, 1500) : 'No patch';
+        return `### File: ${f.filename} (+${f.additions || 0}/-${f.deletions || 0})\n\`\`\`diff\n${snippet}\n\`\`\``;
+      })
+      .join('\n\n');
+
+    const ARCHITECTURE_SYSTEM_PROMPT = `You are a Principal Software Architect and Technical Lead at a top engineering organization.
+Analyze the following Pull Request holistically, like CodeRabbit.
+
+Your task:
+1. "highLevelSummary": A clear, concise 2-4 sentence executive summary of what this Pull Request achieves from a product and system perspective.
+2. "architectureOverview": A detailed breakdown of the architectural changes, patterns introduced, data flow adjustments, and module interactions.
+3. "keyComponentsChanged": An array of the main modules/components affected, each with:
+   - "component": Component or module name (e.g. "Auth Service", "Session Storage", "Diff Rendering Engine")
+   - "purpose": What role this component plays in the change
+   - "impactLevel": One of "HIGH" | "MEDIUM" | "LOW"
+4. "sequenceFlowOrDiagram": A clear ASCII or Mermaid sequence diagram illustrating the new or modified request/execution flow.
+5. "walkthrough": An array mapping each significant file to a concise 1-2 sentence explanation of what changed in that file:
+   - "file": The file path
+   - "changes": Brief summary of changes
+6. "potentialRisks": An array of bullet points highlighting potential edge cases, breaking changes, performance concerns, or security risks to test before merging.
+
+Respond strictly with a valid JSON object matching this schema:
+{
+  "highLevelSummary": "...",
+  "architectureOverview": "...",
+  "keyComponentsChanged": [
+    { "component": "...", "purpose": "...", "impactLevel": "HIGH" }
+  ],
+  "sequenceFlowOrDiagram": "User -> API Client -> Express Controller -> Gemini AI Engine",
+  "walkthrough": [
+    { "file": "src/services/auth.ts", "changes": "Added JWT verification and session refresh logic." }
+  ],
+  "potentialRisks": [
+    "Ensure token expiration is properly handled during network disconnects."
+  ]
+}
+
+Do NOT output markdown fences or commentary outside the JSON object.`;
+
+    const userPrompt = `Pull Request: ${prTitle}
+Description: ${prDescription || 'No description provided.'}
+
+Files Changed:
+${fileSummary}`;
+
+    const modelsToTry = [
+      'gemini-3.6-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-3.7-flash',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+    ];
+
+    let rawResponse = '';
+    let lastError: unknown = null;
+
+    for (let round = 0; round < 2; round++) {
+      for (const model of modelsToTry) {
+        try {
+          console.log(`[Gemini] Generating PR architecture using ${model}...`);
+          const apiCall = ai.models.generateContent({
+            model,
+            config: {
+              systemInstruction: ARCHITECTURE_SYSTEM_PROMPT,
+              temperature: 0.2,
+              maxOutputTokens: 3000,
+              responseMimeType: 'application/json',
+            },
+            contents: userPrompt,
+          });
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout after 15s for model ${model}`)), 15000)
+          );
+
+          const response = (await Promise.race([apiCall, timeoutPromise])) as any;
+          if (response?.text) {
+            rawResponse = response.text;
+            console.log(`[Gemini] Architecture generated successfully using ${model}`);
+            break;
+          }
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`[Gemini] Model ${model} failed for PR architecture:`, err.message || err);
+          await sleep(250);
+        }
+      }
+      if (rawResponse) break;
+      await sleep(1000);
+    }
+
+    if (!rawResponse) {
+      // Return a graceful fallback if AI calls were rate limited
+      return {
+        highLevelSummary: `Pull Request "${prTitle}" modifies ${files.length} files across the repository.`,
+        architectureOverview: `This change includes updates across ${files.map((f) => f.filename).slice(0, 5).join(', ')}.`,
+        keyComponentsChanged: files.slice(0, 4).map((f) => ({
+          component: f.filename,
+          purpose: 'Source code modification',
+          impactLevel: 'MEDIUM' as const,
+        })),
+        sequenceFlowOrDiagram: 'PR Branch -> Code Inspection -> Build & Verify -> Merge',
+        walkthrough: files.map((f) => ({
+          file: f.filename,
+          changes: `Modified with +${f.additions || 0}/-${f.deletions || 0} lines.`,
+        })),
+        potentialRisks: ['Verify unit test coverage and regression test modified components.'],
+      };
+    }
+
+    try {
+      const cleaned = stripCodeFences(rawResponse);
+      const parsed = JSON.parse(cleaned);
+      return {
+        highLevelSummary: typeof parsed.highLevelSummary === 'string' ? parsed.highLevelSummary : '',
+        architectureOverview: typeof parsed.architectureOverview === 'string' ? parsed.architectureOverview : '',
+        keyComponentsChanged: Array.isArray(parsed.keyComponentsChanged) ? parsed.keyComponentsChanged : [],
+        sequenceFlowOrDiagram: typeof parsed.sequenceFlowOrDiagram === 'string' ? parsed.sequenceFlowOrDiagram : '',
+        walkthrough: Array.isArray(parsed.walkthrough) ? parsed.walkthrough : [],
+        potentialRisks: Array.isArray(parsed.potentialRisks) ? parsed.potentialRisks : [],
+      };
+    } catch (err) {
+      console.error('[Gemini] Failed to parse architecture JSON:', rawResponse);
+      return {
+        highLevelSummary: `Pull Request "${prTitle}" updates ${files.length} files.`,
+        architectureOverview: rawResponse.slice(0, 300),
+        keyComponentsChanged: [],
+        walkthrough: [],
+        potentialRisks: [],
+      };
+    }
+  },
 };

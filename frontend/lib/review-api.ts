@@ -17,6 +17,22 @@ export interface PersistedComment {
   createdAt: string;
 }
 
+export interface PrArchitectureSummary {
+  highLevelSummary: string;
+  architectureOverview: string;
+  keyComponentsChanged: Array<{
+    component: string;
+    purpose: string;
+    impactLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  }>;
+  sequenceFlowOrDiagram?: string;
+  walkthrough: Array<{
+    file: string;
+    changes: string;
+  }>;
+  potentialRisks: string[];
+}
+
 export interface PersistedReview {
   _id: string;
   prUrl: string;
@@ -29,6 +45,7 @@ export interface PersistedReview {
   totalFiles: number;
   filesReviewed: number;
   totalComments: number;
+  architectureSummary?: PrArchitectureSummary;
   createdAt: string;
   updatedAt: string;
 }
