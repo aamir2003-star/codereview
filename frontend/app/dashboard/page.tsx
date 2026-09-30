@@ -280,57 +280,57 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Bugatti Luxury Profile Header ── */}
-        <div className="border border-[#262626] bg-[#0d0d0d] p-6 rounded-none mb-6 text-white">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+        {/* ── Profile Header ── */}
+        <div className="border border-[#262626] bg-[#0d0d0d] p-5 sm:p-6 rounded-xl mb-6 text-white shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             {/* Avatar + Identity */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3.5">
               <div className="relative shrink-0">
                 {user?.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={user.avatarUrl}
                     alt={user.username}
-                    className="h-12 w-12 rounded-full border border-[#3a3a3a]"
+                    className="h-11 w-11 rounded-full border border-[#3a3a3a]"
                   />
                 ) : (
-                  <div className="h-12 w-12 rounded-full bg-[#141414] border border-[#3a3a3a] flex items-center justify-center font-mono text-sm text-white">
+                  <div className="h-11 w-11 rounded-full bg-[#141414] border border-[#3a3a3a] flex items-center justify-center font-mono text-sm text-white">
                     {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                   </div>
                 )}
                 {/* Status Dot */}
                 <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-white border-2 border-black" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 border-2 border-black" />
                 </span>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="font-display text-lg sm:text-xl font-normal uppercase tracking-[3px] text-white">
+              <div className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-base sm:text-lg font-semibold text-white tracking-tight">
                     @{user?.username}
                   </h1>
-                  <span className="font-mono text-[10px] uppercase tracking-[2px] text-white px-2.5 py-0.5 border border-[#3a3a3a] rounded-full">
-                    SESSION ACTIVE
+                  <span className="font-mono text-[10px] text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/30">
+                    Active Session
                   </span>
                 </div>
-                <p className="font-mono text-[11px] uppercase tracking-[1.5px] text-[#999999]">
-                  GITHUB OAUTH &bull; {repos.length} REPOSITORIES SYNCHRONIZED
+                <p className="text-xs text-[#a1a1aa] font-mono">
+                  GitHub OAuth &bull; {repos.length} repositories synchronized
                 </p>
               </div>
             </div>
 
             {/* Right side: Telemetry badge + Logout button */}
             <div className="flex items-center gap-3 shrink-0">
-              <div className="hidden sm:flex items-center gap-2 border border-[#262626] bg-black px-3.5 py-2 rounded-none font-mono">
-                <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_6px_#ffffff]" />
-                <span className="text-[10px] uppercase tracking-[2px] text-[#999999]">
-                  GEMINI FLASH 3.6 MATRIX
+              <div className="hidden sm:flex items-center gap-2 border border-[#262626] bg-[#141414] px-3 py-1.5 rounded-lg text-xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
+                <span className="font-mono text-xs text-[#a1a1aa]">
+                  Gemini Flash Matrix
                 </span>
               </div>
 
               <button
                 onClick={logout}
-                className="h-9 px-5 rounded-full border border-[#3a3a3a] hover:border-white bg-transparent text-white font-mono text-xs uppercase tracking-[2px] transition-all cursor-pointer flex items-center gap-2"
+                className="h-8 px-3.5 rounded-lg border border-[#3a3a3a] hover:border-white bg-[#18181b] hover:bg-[#27272a] text-[#d4d4d8] hover:text-white text-xs font-medium transition-all cursor-pointer flex items-center gap-2"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 <span>Log out</span>
