@@ -62,9 +62,8 @@ export function CinematicHero() {
       canvas.height = backH;
     }
 
-    // Background
-    ctx.fillStyle = '#050505';
-    ctx.fillRect(0, 0, backW, backH);
+    // Clear canvas so background video shines through
+    ctx.clearRect(0, 0, backW, backH);
 
     // Continuous float position: 0.0 → (FRAME_COUNT-1)
     const floatIdx = progress * (FRAME_COUNT - 1);
@@ -273,6 +272,16 @@ export function CinematicHero() {
           </div>
         </div>
 
+        {/* Layer 0: Ambient Jellyfish Background Video */}
+        <video
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-35 z-0"
+          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260813_115057_94c3699b-0fd1-4124-bcf3-3626bb8c1f77.mp4"
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+
         {/* Character canvas */}
         <div
           ref={characterRef}
@@ -283,7 +292,7 @@ export function CinematicHero() {
             ref={canvasRef}
             aria-hidden="true"
             className="absolute inset-0 w-full h-full"
-            style={{ opacity: 0.5 }}
+            style={{ opacity: 0.85, mixBlendMode: 'screen' }}
           />
         </div>
 
