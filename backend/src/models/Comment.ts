@@ -12,6 +12,8 @@ export interface IComment extends Document {
   upvotes: mongoose.Types.ObjectId[];
   resolved: boolean;
   resolvedBy?: mongoose.Types.ObjectId;
+  publishedToGithub?: boolean;
+  githubCommentUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +38,8 @@ const CommentSchema = new Schema<IComment>(
     upvotes: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     resolved: { type: Boolean, default: false },
     resolvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    publishedToGithub: { type: Boolean, default: false },
+    githubCommentUrl: { type: String, default: '' },
   },
   { timestamps: true }
 );

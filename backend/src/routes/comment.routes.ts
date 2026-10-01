@@ -12,4 +12,7 @@ router.patch('/:id/resolve', reviewController.resolveComment);
 // Toggle upvote on a comment
 router.patch('/:id/upvote', reviewController.upvoteComment);
 
+// Publish single comment to GitHub PR
+router.post('/:id/publish-github', reviewController.publishSingleCommentToGithub);
+
 export default router;

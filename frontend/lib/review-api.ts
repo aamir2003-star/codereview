@@ -14,6 +14,8 @@ export interface PersistedComment {
   upvotes: string[];
   resolved: boolean;
   resolvedBy?: string;
+  publishedToGithub?: boolean;
+  githubCommentUrl?: string;
   createdAt: string;
 }
 
@@ -46,6 +48,8 @@ export interface PersistedReview {
   filesReviewed: number;
   totalComments: number;
   architectureSummary?: PrArchitectureSummary;
+  publishedToGithub?: boolean;
+  githubReviewUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -162,6 +166,42 @@ export async function upvoteComment(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to upvote comment');
+  }
+
+  return res.json();
+}
+
+export async function publishReviewToGithub(
+  token: string,
+  reviewId: string
+): Promise<{ success: boolean; published: boolean; githubReviewUrl: string; commentsCount: number }> {
+  const res = await fetch(`${API_URL}/review/${reviewId}/publish-github`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.details || err.error || 'Failed to publish review to GitHub');
+  }
+
+  return res.json();
+}
+
+export async function publishSingleCommentToGithub(
+  token: string,
+  commentId: string
+): Promise<{ success: boolean; comment: PersistedComment; githubCommentUrl: string }> {
+  const res = await fetch(`${API_URL}/comments/${commentId}/publish-github`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.details || err.error || 'Failed to publish comment to GitHub');
   }
 
   return res.json();

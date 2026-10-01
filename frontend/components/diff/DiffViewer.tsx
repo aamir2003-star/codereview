@@ -1,9 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FileDiff, PullRequest } from '@/lib/api';
-import { PersistedComment, PersistedReview, PrArchitectureSummary } from '@/lib/review-api';
+import {
+  PersistedComment,
+  PersistedReview,
+  PrArchitectureSummary,
+  publishReviewToGithub,
+  publishSingleCommentToGithub,
+} from '@/lib/review-api';
 import { useReviewSocket } from '@/hooks/useReviewSocket';
 import { PrArchitectureViewer } from '@/components/review/PrArchitectureViewer';
 import {
@@ -15,7 +21,6 @@ import {
   X,
   Sparkles,
   Check,
-  Layers,
   ChevronRight,
   ShieldAlert,
   Bug,
@@ -26,6 +31,11 @@ import {
   Square,
   Workflow,
   Code2,
+  GitPullRequest,
+  ExternalLink,
+  Loader2,
+  Send,
+  CheckCheck,
 } from 'lucide-react';
 import { HighTrafficModal } from '@/components/ui/HighTrafficModal';
 
@@ -65,16 +75,21 @@ const SEVERITY_LABEL = {
 
 function CommentCardInline({
   comment,
+  prUrl,
   onResolve,
   onUpvote,
+  onPublishToGithub,
   currentUserId,
 }: {
   comment: PersistedComment;
+  prUrl?: string;
   onResolve?: (commentId: string) => void;
   onUpvote?: (commentId: string) => void;
+  onPublishToGithub?: (commentId: string) => Promise<void>;
   currentUserId?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const Icon = SEVERITY_ICONS[comment.severity];
   const hasUpvoted = currentUserId ? comment.upvotes.includes(currentUserId) : false;
 
@@ -83,6 +98,16 @@ function CommentCardInline({
       navigator.clipboard.writeText(comment.suggestedFix);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!onPublishToGithub || isPublishing) return;
+    setIsPublishing(true);
+    try {
+      await onPublishToGithub(comment._id);
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -119,11 +144,25 @@ function CommentCardInline({
             Line {comment.lineNumber}
           </span>
         </div>
-        {comment.resolved && (
-          <span className="text-[11px] font-medium text-[#4ec9b0]">
-            Resolved
-          </span>
-        )}
+        
+        <div className="flex items-center gap-2">
+          {comment.publishedToGithub && (
+            <a
+              href={comment.githubCommentUrl || prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-500/30 px-2 py-0.5 rounded hover:bg-emerald-900/40 transition-colors flex items-center gap-1"
+            >
+              <CheckCheck className="h-3 w-3" />
+              <span>On GitHub ↗</span>
+            </a>
+          )}
+          {comment.resolved && (
+            <span className="text-[11px] font-medium text-[#4ec9b0]">
+              Resolved
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Message */}
@@ -148,17 +187,34 @@ function CommentCardInline({
 
       {/* Bottom Actions */}
       <div className="mt-3 flex items-center justify-between pt-2 border-t border-[#333333]">
-        <button
-          onClick={() => onUpvote?.(comment._id)}
-          className={`h-6 px-2.5 rounded font-mono text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
-            hasUpvoted
-              ? 'bg-[#007acc] text-white font-semibold'
-              : 'bg-[#2d2d2d] hover:bg-[#3c3c3c] text-[#a1a1aa] hover:text-white border border-[#3a3a3a]'
-          }`}
-        >
-          <ThumbsUp className="h-3 w-3" />
-          <span>{comment.upvotes.length}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onUpvote?.(comment._id)}
+            className={`h-6 px-2.5 rounded font-mono text-[11px] transition-all flex items-center gap-1.5 cursor-pointer ${
+              hasUpvoted
+                ? 'bg-[#007acc] text-white font-semibold'
+                : 'bg-[#2d2d2d] hover:bg-[#3c3c3c] text-[#a1a1aa] hover:text-white border border-[#3a3a3a]'
+            }`}
+          >
+            <ThumbsUp className="h-3 w-3" />
+            <span>{comment.upvotes.length}</span>
+          </button>
+
+          {!comment.publishedToGithub && onPublishToGithub && (
+            <button
+              onClick={handlePublish}
+              disabled={isPublishing}
+              className="h-6 px-2.5 rounded font-mono text-[11px] bg-[#2d2d2d] hover:bg-[#3c3c3c] text-[#a1a1aa] hover:text-white border border-[#3a3a3a] transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isPublishing ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Send className="h-3 w-3" />
+              )}
+              <span>Post to GitHub</span>
+            </button>
+          )}
+        </div>
 
         <button
           onClick={() => onResolve?.(comment._id)}
@@ -197,13 +253,22 @@ export function DiffViewer({
     currentReview?.architectureSummary
   );
 
+  const [isPublishingReview, setIsPublishingReview] = useState(false);
+  const [publishedReviewUrl, setPublishedReviewUrl] = useState<string | null>(
+    currentReview?.githubReviewUrl || null
+  );
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string; url?: string } | null>(null);
+
   React.useEffect(() => {
     if (currentReview?.architectureSummary) {
       setLocalArchitecture(currentReview.architectureSummary);
     }
-  }, [currentReview?.architectureSummary]);
+    if (currentReview?.githubReviewUrl) {
+      setPublishedReviewUrl(currentReview.githubReviewUrl);
+    }
+  }, [currentReview]);
 
-  const { activeUsers, progress, isStreaming } = useReviewSocket({
+  const { progress, isStreaming } = useReviewSocket({
     reviewId: reviewId ?? null,
     token,
     onNewComment: (newComment) => {
@@ -266,6 +331,48 @@ export function DiffViewer({
 
   const diffLines = parsePatch(selectedFile?.patch);
 
+  // Publish complete review to GitHub
+  const handlePublishReviewToGithub = async () => {
+    if (!token || !reviewId || isPublishingReview) return;
+    setIsPublishingReview(true);
+    setNotification(null);
+
+    try {
+      const res = await publishReviewToGithub(token, reviewId);
+      setPublishedReviewUrl(res.githubReviewUrl);
+      setNotification({
+        type: 'success',
+        message: `Successfully posted review with ${res.commentsCount} inline suggestions to GitHub!`,
+        url: res.githubReviewUrl,
+      });
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to publish review to GitHub',
+      });
+    } finally {
+      setIsPublishingReview(false);
+    }
+  };
+
+  // Publish single comment to GitHub
+  const handlePublishSingleComment = async (commentId: string) => {
+    if (!token) return;
+    try {
+      const res = await publishSingleCommentToGithub(token, commentId);
+      setNotification({
+        type: 'success',
+        message: 'Comment posted directly to GitHub PR diff!',
+        url: res.githubCommentUrl,
+      });
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Failed to post comment to GitHub',
+      });
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-6 text-white">
       <HighTrafficModal
@@ -303,7 +410,7 @@ export function DiffViewer({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             {/* Review Controller Buttons */}
             {isStreaming || isReviewing ? (
               <div className="flex items-center gap-2.5">
@@ -338,13 +445,41 @@ export function DiffViewer({
                 )}
               </div>
             ) : currentReview || reviewComments.length > 0 ? (
-              <button
-                onClick={onStartReview}
-                className="h-8 px-3.5 rounded-lg border border-[#3a3a3a] hover:border-white bg-[#2d2d2d] hover:bg-[#3c3c3c] text-[#d4d4d4] text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-                <span>AI Review Again</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Publish to GitHub Button */}
+                {publishedReviewUrl ? (
+                  <a
+                    href={publishedReviewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="h-8 px-3 rounded-lg bg-emerald-950/40 border border-emerald-500/50 hover:bg-emerald-900/50 text-emerald-300 text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    <span>Published on GitHub ↗</span>
+                  </a>
+                ) : (
+                  <button
+                    onClick={handlePublishReviewToGithub}
+                    disabled={isPublishingReview}
+                    className="h-8 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                  >
+                    {isPublishingReview ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <GitPullRequest className="h-3.5 w-3.5" />
+                    )}
+                    <span>{isPublishingReview ? 'Posting...' : 'Post to GitHub'}</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={onStartReview}
+                  className="h-8 px-3 rounded-lg border border-[#3a3a3a] hover:border-white bg-[#2d2d2d] hover:bg-[#3c3c3c] text-[#d4d4d4] text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                  <span>Re-Review</span>
+                </button>
+              </div>
             ) : (
               <button
                 onClick={onStartReview}
@@ -363,6 +498,43 @@ export function DiffViewer({
             </button>
           </div>
         </div>
+
+        {/* Global Notification Banner */}
+        <AnimatePresence>
+          {notification && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className={`px-5 py-2 text-xs border-b flex items-center justify-between ${
+                notification.type === 'success'
+                  ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-200'
+                  : 'bg-rose-950/60 border-rose-500/30 text-rose-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span>{notification.message}</span>
+                {notification.url && (
+                  <a
+                    href={notification.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-semibold flex items-center gap-1 hover:text-white"
+                  >
+                    <span>View Review on GitHub</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+              <button
+                onClick={() => setNotification(null)}
+                className="text-white/60 hover:text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Tab Selector */}
         <div className="border-b border-[#2d2d2d] bg-[#252526] px-5 flex items-center gap-6">
@@ -390,159 +562,144 @@ export function DiffViewer({
             }`}
           >
             <Code2 className="h-3.5 w-3.5" />
-            <span>Diagnostic Diff ({reviewComments.length})</span>
+            <span>Unified Diff &amp; Inline Audit</span>
+            {reviewComments.length > 0 && (
+              <span className="px-1.5 py-0.2 bg-[#007acc] text-white rounded-full text-[10px] font-mono">
+                {reviewComments.length}
+              </span>
+            )}
             {activeTab === 'diff' && (
               <div className="absolute bottom-0 inset-x-0 h-0.5 bg-[#007acc]" />
             )}
           </button>
         </div>
 
-        {/* Tab 1: Architecture View */}
-        {activeTab === 'architecture' ? (
-          <div className="flex-1 overflow-y-auto p-5 sm:p-7 bg-[#1e1e1e]">
+        {/* Tab 1: CodeRabbit-Style PR Architecture & Overview */}
+        {activeTab === 'architecture' && (
+          <div className="flex-1 overflow-y-auto bg-[#1e1e1e]">
             <PrArchitectureViewer
               architecture={localArchitecture}
-              isAnalyzing={isReviewing || isStreaming}
+              isAnalyzing={isStreaming && !localArchitecture}
             />
           </div>
-        ) : (
-          /* Tab 2: Code Diff View (VS Code Dark+ Environment) */
-          <div className="flex flex-1 overflow-hidden divide-x divide-[#2d2d2d]">
-            {/* VS Code Explorer / File Sidebar */}
-            <div className="w-72 bg-[#252526] flex flex-col overflow-y-auto divide-y divide-[#2d2d2d]">
-              <div className="p-3 font-mono text-xs text-[#858585] flex items-center gap-2 uppercase tracking-wider text-[11px]">
-                <Layers className="h-3.5 w-3.5 text-[#007acc]" />
-                <span>Changed Files ({files.length})</span>
-              </div>
+        )}
 
-              {isLoading ? (
-                <div className="p-3 space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-9 bg-[#1e1e1e] animate-pulse rounded" />
-                  ))}
-                </div>
-              ) : (
-                files.map((file, idx) => {
+        {/* Tab 2: Unified Diff & Inline Audit */}
+        {activeTab === 'diff' && (
+          <div className="flex flex-1 overflow-hidden">
+            {/* File Tree Sidebar */}
+            <div className="w-64 border-r border-[#2d2d2d] bg-[#252526] overflow-y-auto shrink-0 flex flex-col">
+              <div className="px-3 py-2 text-[11px] font-mono text-[#858585] uppercase tracking-wider border-b border-[#2d2d2d]">
+                Files Changed ({files.length})
+              </div>
+              <div className="p-1 space-y-0.5 flex-1 overflow-y-auto">
+                {files.map((file, idx) => {
+                  const fileIssuesCount = reviewComments.filter(
+                    (c) => c.filePath === file.filename
+                  ).length;
                   const isSelected = selectedFileIndex === idx;
-                  const fileComments = reviewComments.filter((c) => c.filePath === file.filename);
-                  const hasIssues = fileComments.length > 0;
 
                   return (
                     <button
-                      key={file.sha || idx}
+                      key={file.sha || file.filename}
                       onClick={() => setSelectedFileIndex(idx)}
-                      className={`w-full flex items-center justify-between p-2.5 text-left transition-colors cursor-pointer ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                         isSelected
                           ? 'bg-[#37373d] text-white font-medium border-l-2 border-[#007acc]'
                           : 'text-[#cccccc] hover:bg-[#2a2d2e] hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <FileCode className="h-3.5 w-3.5 shrink-0 text-[#007acc]" />
-                        <span className="truncate font-mono text-xs">{file.filename}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <FileCode className="h-3.5 w-3.5 text-[#858585] shrink-0" />
+                        <span className="truncate font-mono text-[11px]">
+                          {file.filename}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0 ml-2 font-mono text-[11px]">
-                        {hasIssues && (
-                          <span className="text-[#e3b341] bg-[#d4a017]/20 border border-[#d4a017]/40 px-1 rounded text-[10px]">
-                            {fileComments.length}
+
+                      <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                        {fileIssuesCount > 0 && (
+                          <span className="bg-[#f85149] text-white px-1 rounded-full font-bold">
+                            {fileIssuesCount}
                           </span>
                         )}
                         <span className="text-[#4ec9b0]">+{file.additions}</span>
-                        <ChevronRight className={`h-3 w-3 ${isSelected ? 'text-white' : 'text-[#858585]'}`} />
+                        <span className="text-[#f85149]">-{file.deletions}</span>
                       </div>
                     </button>
                   );
-                })
-              )}
+                })}
+              </div>
             </div>
 
-            {/* VS Code Editor Diff Floor */}
-            <div className="flex-1 flex flex-col bg-[#1e1e1e] overflow-hidden relative">
+            {/* Diff Content View */}
+            <div className="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e]">
               {selectedFile ? (
-                <>
-                  {/* File Header Tab */}
-                  <div className="px-4 py-2 border-b border-[#2d2d2d] bg-[#252526] flex items-center justify-between font-mono text-xs">
-                    <div className="flex items-center gap-2 text-[#cccccc]">
-                      <span className="text-white font-medium">{selectedFile.filename}</span>
-                      <span className="text-[#858585]">({selectedFile.status})</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[#4ec9b0]">+{selectedFile.additions}</span>
-                      <span className="text-[#f85149]">-{selectedFile.deletions}</span>
-                    </div>
+                <div className="flex-1 overflow-y-auto">
+                  {/* File Header Bar */}
+                  <div className="sticky top-0 z-10 bg-[#252526] border-b border-[#2d2d2d] px-4 py-2 flex items-center justify-between">
+                    <span className="font-mono text-xs text-[#cccccc] font-medium">
+                      {selectedFile.filename}
+                    </span>
+                    <span className="font-mono text-[11px] text-[#858585]">
+                      +{selectedFile.additions} / -{selectedFile.deletions}
+                    </span>
                   </div>
 
-                  {/* Code Diff Lines with VS Code Dark+ Syntax Highlighting */}
-                  <div className="flex-1 overflow-auto font-mono text-[12px] leading-5 select-text bg-[#1e1e1e]">
-                    {diffLines.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-center text-[#858585] p-8">
-                        <Check className="h-8 w-8 text-[#4ec9b0] mb-2" />
-                        <span className="text-xs">Binary or empty file change</span>
-                      </div>
-                    ) : (
-                      <div className="py-2">
-                        {diffLines.map((line) => {
-                          const inlineComments = commentsByLine[line.lineNum] ?? [];
-                          const isAdd = line.type === 'add';
-                          const isDelete = line.type === 'delete';
-                          const isHunk = line.type === 'hunk';
+                  {/* Diff Lines Table */}
+                  <div className="font-mono text-xs leading-5 select-text">
+                    {diffLines.map((line) => {
+                      const lineComments = line.lineNum ? commentsByLine[line.lineNum] : [];
 
-                          return (
-                            <React.Fragment key={line.id}>
-                              <div
-                                className={`flex items-start text-[12px] font-mono leading-5 ${
-                                  isAdd
-                                    ? 'bg-[#203426] border-l-[3px] border-[#2ea043]'
-                                    : isDelete
-                                    ? 'bg-[#372326] border-l-[3px] border-[#f85149]'
-                                    : isHunk
-                                    ? 'bg-[#252526] text-[#569cd6] border-l-[3px] border-[#007acc] py-0.5'
-                                    : 'bg-[#1e1e1e] hover:bg-[#282828] border-l-[3px] border-transparent'
-                                }`}
-                              >
-                                {/* Line Number Gutter */}
-                                <div className="w-12 shrink-0 text-[#858585] select-none text-right pr-3 border-r border-[#2d2d2d] mr-3 text-[11px] font-mono">
-                                  {isHunk ? '...' : isDelete ? '-' : line.lineNum || ''}
-                                </div>
+                      return (
+                        <React.Fragment key={line.id}>
+                          <div
+                            className={`flex items-start px-2 py-0.5 hover:bg-white/[0.04] transition-colors ${
+                              line.type === 'add'
+                                ? 'bg-[#203426] text-[#d4d4d4]'
+                                : line.type === 'delete'
+                                ? 'bg-[#372326] text-[#d4d4d4]'
+                                : line.type === 'hunk'
+                                ? 'bg-[#252526] text-[#569cd6] font-semibold py-1'
+                                : 'text-[#d4d4d4]'
+                            }`}
+                          >
+                            <span className="w-10 text-right pr-3 select-none text-[#858585] text-[11px] shrink-0">
+                              {line.lineNum || ''}
+                            </span>
+                            <span className="w-4 text-center select-none shrink-0 font-bold">
+                              {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
+                            </span>
+                            <span className="flex-1 whitespace-pre-wrap break-all pl-1">
+                              {line.type === 'hunk'
+                                ? line.content
+                                : highlightVsCodeSyntax(line.content.replace(/^[+-]/, ''))}
+                            </span>
+                          </div>
 
-                                {/* Code Content with VS Code Syntax Highlighting */}
-                                <div className="flex-1 whitespace-pre break-all pr-4 text-[#d4d4d4]">
-                                  {isHunk ? (
-                                    <span className="text-[#569cd6] font-medium">
-                                      {line.content}
-                                    </span>
-                                  ) : (
-                                    highlightVsCodeSyntax(
-                                      isAdd
-                                        ? line.content.replace(/^\+/, ' ')
-                                        : isDelete
-                                        ? line.content.replace(/^-/, ' ')
-                                        : line.content
-                                    )
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Inline AI Comments */}
-                              {inlineComments.map((comment) => (
+                          {/* Render Inline AI Comment Cards */}
+                          {lineComments && lineComments.length > 0 && (
+                            <div className="bg-[#181818] py-1 border-y border-[#333333]">
+                              {lineComments.map((c) => (
                                 <CommentCardInline
-                                  key={comment._id}
-                                  comment={comment}
+                                  key={c._id}
+                                  comment={c}
+                                  prUrl={pr.html_url}
                                   onResolve={onResolve}
                                   onUpvote={onUpvote}
+                                  onPublishToGithub={handlePublishSingleComment}
                                   currentUserId={userId}
                                 />
                               ))}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    )}
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
-                </>
+                </div>
               ) : (
-                <div className="flex items-center justify-center h-full text-[#858585] text-xs font-mono">
-                  Select a file from the explorer to inspect diff
+                <div className="flex-1 flex items-center justify-center text-sm text-[#858585]">
+                  Select a file to view unified diff and audit comments
                 </div>
               )}
             </div>

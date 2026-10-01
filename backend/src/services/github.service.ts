@@ -241,4 +241,166 @@ export const githubService = {
       throw new GitHubApiError((error as Error).message);
     }
   },
+
+  async getPullRequest(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    pullNumber: number
+  ): Promise<GitHubPR> {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new GitHubApiError(`Failed to fetch PR details: ${response.statusText}`, response.status);
+      }
+
+      return (await response.json()) as GitHubPR;
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async createPullRequestReview(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    payload: {
+      commit_id?: string;
+      body: string;
+      event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+      comments?: Array<{
+        path: string;
+        line: number;
+        side?: 'RIGHT' | 'LEFT';
+        body: string;
+      }>;
+    }
+  ): Promise<{ id: number; html_url: string }> {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/reviews`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new GitHubApiError(
+          `Failed to create PR review on GitHub (${response.status}): ${errBody}`,
+          response.status
+        );
+      }
+
+      return (await response.json()) as { id: number; html_url: string };
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async createPullRequestComment(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    payload: {
+      commit_id: string;
+      path: string;
+      line: number;
+      side?: 'RIGHT' | 'LEFT';
+      body: string;
+    }
+  ): Promise<{ id: number; html_url: string }> {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+          body: JSON.stringify({
+            commit_id: payload.commit_id,
+            path: payload.path,
+            line: payload.line,
+            side: payload.side || 'RIGHT',
+            body: payload.body,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new GitHubApiError(
+          `Failed to post PR inline comment on GitHub (${response.status}): ${errBody}`,
+          response.status
+        );
+      }
+
+      return (await response.json()) as { id: number; html_url: string };
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
+
+  async createIssueComment(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string
+  ): Promise<{ id: number; html_url: string }> {
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+          body: JSON.stringify({ body }),
+        }
+      );
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new GitHubApiError(
+          `Failed to create issue comment on GitHub (${response.status}): ${errBody}`,
+          response.status
+        );
+      }
+
+      return (await response.json()) as { id: number; html_url: string };
+    } catch (error) {
+      if (error instanceof GitHubApiError) throw error;
+      throw new GitHubApiError((error as Error).message);
+    }
+  },
 };

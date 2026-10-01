@@ -482,4 +482,228 @@ export const reviewController = {
       res.status(500).json({ error: 'Internal server error' });
     }
   },
+
+  /**
+   * POST /review/:id/publish-github
+   * Submits a full Pull Request review with architecture overview and inline comments to GitHub.
+   */
+  async publishReviewToGithub(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const reviewId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user?.userId;
+
+    if (!reviewId || !mongoose.isValidObjectId(reviewId) || !userId) {
+      res.status(400).json({ error: 'Valid review ID and authentication required' });
+      return;
+    }
+
+    try {
+      const review = await Review.findById(reviewId);
+      if (!review) {
+        res.status(404).json({ error: 'Review not found' });
+        return;
+      }
+
+      const comments = await Comment.find({ reviewId: review._id });
+      const accessToken = await getUserAccessToken(userId);
+
+      // Fetch PR to get latest head commit SHA
+      const prDetails = await githubService.getPullRequest(
+        accessToken,
+        review.owner,
+        review.repo,
+        review.pullNumber
+      );
+      const headSha = prDetails.head.sha;
+
+      // Format main review body markdown
+      const arch = review.architectureSummary;
+      let reviewBody = `## 🤖 ReviewCopilot AI Code Review\n\n`;
+
+      if (arch?.highLevelSummary) {
+        reviewBody += `### 📋 Executive Summary\n${arch.highLevelSummary}\n\n`;
+      }
+
+      if (arch?.architectureOverview) {
+        reviewBody += `### 🏛️ System Architecture & Flow\n${arch.architectureOverview}\n\n`;
+      }
+
+      if (arch?.potentialRisks && arch.potentialRisks.length > 0) {
+        reviewBody += `### ⚠️ Risk & Security Assessment\n`;
+        arch.potentialRisks.forEach((risk, i) => {
+          reviewBody += `${i + 1}. ${risk}\n`;
+        });
+        reviewBody += `\n`;
+      }
+
+      const securityCount = comments.filter((c) => c.severity === 'security').length;
+      const bugCount = comments.filter((c) => c.severity === 'bug').length;
+      const smellCount = comments.filter((c) => c.severity === 'smell').length;
+
+      reviewBody += `### 📊 Findings Breakdown\n`;
+      reviewBody += `- 🚨 **Security Vulnerabilities:** ${securityCount}\n`;
+      reviewBody += `- 🐛 **Logic Bugs:** ${bugCount}\n`;
+      reviewBody += `- 💡 **Code Smells & Improvements:** ${smellCount}\n\n`;
+      reviewBody += `*Generated automatically by [ReviewCopilot](https://github.com/aamir2003-star/codereview).*`;
+
+      // Format inline comments for GitHub API
+      const inlineComments = comments.map((c) => {
+        let body = `### 🤖 AI Review Finding: \`${c.severity.toUpperCase()}\`\n\n${c.message}\n\n`;
+        if (c.suggestedFix) {
+          body += `\`\`\`suggestion\n${c.suggestedFix}\n\`\`\``;
+        }
+        return {
+          path: c.filePath,
+          line: c.lineNumber,
+          side: 'RIGHT' as const,
+          body,
+        };
+      });
+
+      let githubReviewUrl = '';
+      let publishedCommentsCount = 0;
+
+      // Determine event status: REQUEST_CHANGES if security issues found, else COMMENT
+      const event = securityCount > 0 ? 'REQUEST_CHANGES' : 'COMMENT';
+
+      try {
+        // Attempt to submit review with inline comments
+        const githubReview = await githubService.createPullRequestReview(
+          accessToken,
+          review.owner,
+          review.repo,
+          review.pullNumber,
+          {
+            commit_id: headSha,
+            body: reviewBody,
+            event,
+            comments: inlineComments.length > 0 ? inlineComments : undefined,
+          }
+        );
+        githubReviewUrl = githubReview.html_url;
+        publishedCommentsCount = inlineComments.length;
+      } catch (reviewErr) {
+        console.warn('[PublishToGithub] Inline review failed, falling back to summary issue comment:', reviewErr);
+
+        // Fallback: Submit high-level summary as an issue comment so findings are preserved
+        const issueComment = await githubService.createIssueComment(
+          accessToken,
+          review.owner,
+          review.repo,
+          review.pullNumber,
+          reviewBody
+        );
+        githubReviewUrl = issueComment.html_url;
+      }
+
+      // Update Review and Comments in database
+      review.publishedToGithub = true;
+      review.githubReviewUrl = githubReviewUrl;
+      await review.save();
+
+      await Comment.updateMany(
+        { reviewId: review._id },
+        { $set: { publishedToGithub: true, githubCommentUrl: githubReviewUrl } }
+      );
+
+      // Notify clients via Socket.io
+      const io = getIO();
+      io?.to(`review:${review._id.toString()}`).emit('review:published_to_github', {
+        reviewId: review._id.toString(),
+        githubReviewUrl,
+      });
+
+      res.status(200).json({
+        success: true,
+        published: true,
+        githubReviewUrl,
+        commentsCount: publishedCommentsCount,
+      });
+    } catch (err) {
+      console.error('[PublishReviewToGithub Error]:', err);
+      res.status(500).json({
+        error: 'Failed to publish review to GitHub',
+        details: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  },
+
+  /**
+   * POST /comments/:id/publish-github
+   * Publishes a single inline review comment to GitHub.
+   */
+  async publishSingleCommentToGithub(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const commentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user?.userId;
+
+    if (!commentId || !mongoose.isValidObjectId(commentId) || !userId) {
+      res.status(400).json({ error: 'Valid comment ID and authentication required' });
+      return;
+    }
+
+    try {
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+        res.status(404).json({ error: 'Comment not found' });
+        return;
+      }
+
+      const review = await Review.findById(comment.reviewId);
+      if (!review) {
+        res.status(404).json({ error: 'Associated review not found' });
+        return;
+      }
+
+      const accessToken = await getUserAccessToken(userId);
+
+      const prDetails = await githubService.getPullRequest(
+        accessToken,
+        review.owner,
+        review.repo,
+        review.pullNumber
+      );
+      const headSha = prDetails.head.sha;
+
+      let body = `### 🤖 ReviewCopilot AI Suggestion: \`${comment.severity.toUpperCase()}\`\n\n${comment.message}\n\n`;
+      if (comment.suggestedFix) {
+        body += `\`\`\`suggestion\n${comment.suggestedFix}\n\`\`\``;
+      }
+
+      const githubComment = await githubService.createPullRequestComment(
+        accessToken,
+        review.owner,
+        review.repo,
+        review.pullNumber,
+        {
+          commit_id: headSha,
+          path: comment.filePath,
+          line: comment.lineNumber,
+          side: 'RIGHT',
+          body,
+        }
+      );
+
+      comment.publishedToGithub = true;
+      comment.githubCommentUrl = githubComment.html_url;
+      await comment.save();
+
+      const io = getIO();
+      io?.to(`review:${comment.reviewId.toString()}`).emit('comment:published_to_github', {
+        reviewId: comment.reviewId.toString(),
+        commentId: comment._id.toString(),
+        githubCommentUrl: githubComment.html_url,
+      });
+
+      res.status(200).json({
+        success: true,
+        comment,
+        githubCommentUrl: githubComment.html_url,
+      });
+    } catch (err) {
+      console.error('[PublishSingleCommentToGithub Error]:', err);
+      res.status(500).json({
+        error: 'Failed to publish comment to GitHub',
+        details: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  },
 };

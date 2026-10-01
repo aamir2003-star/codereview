@@ -30,6 +30,8 @@ export interface IReview extends Document {
   filesReviewed: number;
   totalComments: number;
   architectureSummary?: PrArchitectureSummary;
+  publishedToGithub?: boolean;
+  githubReviewUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +75,8 @@ const ReviewSchema = new Schema<IReview>(
       ],
       potentialRisks: [{ type: String }],
     },
+    publishedToGithub: { type: Boolean, default: false },
+    githubReviewUrl: { type: String, default: '' },
   },
   { timestamps: true }
 );

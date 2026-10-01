@@ -16,6 +16,9 @@ router.get('/:id', reviewController.getReview);
 // Stop/cancel an active review by review ID
 router.post('/:id/stop', reviewController.stopReview);
 
+// Publish complete review with architecture and inline suggestions to GitHub
+router.post('/:id/publish-github', reviewController.publishReviewToGithub);
+
 // Check if a review exists for a specific PR
 router.get('/pr/:owner/:repo/:pullNumber', reviewController.getReviewByPr);
 
