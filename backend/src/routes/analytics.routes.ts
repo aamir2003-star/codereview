@@ -14,18 +14,18 @@ const router = Router();
 router.use(requireAuth);
 
 // PR-level health report
-router.get('/:repoFullName/health/:reviewId', getPrHealthReport);
+router.get('/:owner/:repo/health/:reviewId', getPrHealthReport);
 
-// Developer metrics for a repo
-router.get('/:repoFullName/developers', getDeveloperMetrics);
+// Developer metrics for a repository
+router.get('/:owner/:repo/developers', getDeveloperMetrics);
 
 // Weekly trend data
-router.get('/:repoFullName/trend', getWeeklyTrend);
+router.get('/:owner/:repo/trend', getWeeklyTrend);
 
 // Full summary dashboard
-router.get('/:repoFullName/summary', getAnalyticsSummary);
+router.get('/:owner/:repo/summary', getAnalyticsSummary);
 
 // Developer leaderboard
-router.get('/:repoFullName/leaderboard', getLeaderboard);
+router.get('/:owner/:repo/leaderboard', getLeaderboard);
 
 export default router;

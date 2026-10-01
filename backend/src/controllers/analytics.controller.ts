@@ -1,86 +1,105 @@
 import { Request, Response } from 'express';
 import { analyticsService } from '../services/analytics.service';
+import { config } from '../config/env';
+
+function formatErrorResponse(res: Response, message: string, error: unknown, status = 500) {
+  const errMsg = error instanceof Error ? error.message : 'Internal server error';
+  console.error(`[Analytics Error] ${message}:`, errMsg);
+
+  return res.status(status).json({
+    success: false,
+    error: message,
+    ...(config.nodeEnv === 'development' ? { details: errMsg } : {}),
+  });
+}
 
 /**
- * GET /api/analytics/:repoFullName/health/:reviewId
+ * GET /api/analytics/:owner/:repo/health/:reviewId
  * Generate a health report for a specific pull request review.
  */
 export async function getPrHealthReport(req: Request, res: Response) {
   try {
-    const reviewId = req.params.reviewId as string;
+    const { reviewId } = req.params;
+    if (!reviewId) {
+      return res.status(400).json({ success: false, error: 'Review ID is required' });
+    }
+
     const report = await analyticsService.generatePrHealthReport(reviewId);
-    res.json({ success: true, data: report });
-  } catch (error: any) {
-    console.error('[Analytics] Health report error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    return res.json({ success: true, data: report });
+  } catch (error) {
+    return formatErrorResponse(res, 'Failed to generate PR health report', error);
   }
 }
 
 /**
- * GET /api/analytics/:repoFullName/developers
+ * GET /api/analytics/:owner/:repo/developers
  * Retrieve developer-level metrics for a repository.
  */
 export async function getDeveloperMetrics(req: Request, res: Response) {
   try {
-    const repoFullName = req.params.repoFullName as string;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const decodedRepo = decodeURIComponent(repoFullName);
+    const { owner, repo } = req.params;
+    if (!owner || !repo) {
+      return res.status(400).json({ success: false, error: 'Owner and repo are required' });
+    }
 
-    const metrics = await analyticsService.getDeveloperMetrics(decodedRepo, limit);
-    res.json({ success: true, data: metrics });
-  } catch (error: any) {
-    console.error('[Analytics] Developer metrics error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 10), 100);
+    const metrics = await analyticsService.getDeveloperMetrics(owner, repo, limit);
+    return res.json({ success: true, data: metrics });
+  } catch (error) {
+    return formatErrorResponse(res, 'Failed to retrieve developer metrics', error);
   }
 }
 
 /**
- * GET /api/analytics/:repoFullName/trend
+ * GET /api/analytics/:owner/:repo/trend
  * Retrieve weekly trend data for a repository.
  */
 export async function getWeeklyTrend(req: Request, res: Response) {
   try {
-    const repoFullName = req.params.repoFullName as string;
-    const weeks = parseInt(req.query.weeks as string) || 8;
-    const decodedRepo = decodeURIComponent(repoFullName);
+    const { owner, repo } = req.params;
+    if (!owner || !repo) {
+      return res.status(400).json({ success: false, error: 'Owner and repo are required' });
+    }
 
-    const trend = await analyticsService.getWeeklyTrend(decodedRepo, weeks);
-    res.json({ success: true, data: trend });
-  } catch (error: any) {
-    console.error('[Analytics] Trend error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    const weeks = Math.min(Math.max(1, parseInt(req.query.weeks as string) || 8), 52);
+    const trend = await analyticsService.getWeeklyTrend(owner, repo, weeks);
+    return res.json({ success: true, data: trend });
+  } catch (error) {
+    return formatErrorResponse(res, 'Failed to retrieve weekly trend', error);
   }
 }
 
 /**
- * GET /api/analytics/:repoFullName/summary
+ * GET /api/analytics/:owner/:repo/summary
  * Full analytics summary for the repository dashboard.
  */
 export async function getAnalyticsSummary(req: Request, res: Response) {
   try {
-    const repoFullName = req.params.repoFullName as string;
-    const decodedRepo = decodeURIComponent(repoFullName);
+    const { owner, repo } = req.params;
+    if (!owner || !repo) {
+      return res.status(400).json({ success: false, error: 'Owner and repo are required' });
+    }
 
-    const summary = await analyticsService.getAnalyticsSummary(decodedRepo);
-    res.json({ success: true, data: summary });
-  } catch (error: any) {
-    console.error('[Analytics] Summary error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    const summary = await analyticsService.getAnalyticsSummary(owner, repo);
+    return res.json({ success: true, data: summary });
+  } catch (error) {
+    return formatErrorResponse(res, 'Failed to retrieve analytics summary', error);
   }
 }
 
 /**
- * GET /api/analytics/:repoFullName/leaderboard
+ * GET /api/analytics/:owner/:repo/leaderboard
  * Returns a ranked leaderboard of developers by resolved rate and risk score.
  */
 export async function getLeaderboard(req: Request, res: Response) {
   try {
-    const repoFullName = req.params.repoFullName as string;
-    const decodedRepo = decodeURIComponent(repoFullName);
+    const { owner, repo } = req.params;
+    if (!owner || !repo) {
+      return res.status(400).json({ success: false, error: 'Owner and repo are required' });
+    }
 
-    const metrics = await analyticsService.getDeveloperMetrics(decodedRepo, 25);
+    const metrics = await analyticsService.getDeveloperMetrics(owner, repo, 25);
 
-    // Build a leaderboard ranked by resolved rate (descending), then risk (ascending)
     const leaderboard = metrics
       .map((dev, index) => ({
         rank: index + 1,
@@ -99,14 +118,12 @@ export async function getLeaderboard(req: Request, res: Response) {
         return a.riskScore - b.riskScore;
       });
 
-    // Re-assign ranks after sort
     leaderboard.forEach((entry, i) => {
       entry.rank = i + 1;
     });
 
-    res.json({ success: true, data: leaderboard });
-  } catch (error: any) {
-    console.error('[Analytics] Leaderboard error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    return res.json({ success: true, data: leaderboard });
+  } catch (error) {
+    return formatErrorResponse(res, 'Failed to retrieve leaderboard', error);
   }
 }

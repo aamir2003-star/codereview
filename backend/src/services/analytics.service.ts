@@ -4,7 +4,7 @@ import { Comment } from '../models/Comment';
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
-interface DeveloperMetrics {
+export interface DeveloperMetrics {
   userId: string;
   username: string;
   reviewsAuthored: number;
@@ -13,11 +13,11 @@ interface DeveloperMetrics {
   riskScore: number;
 }
 
-interface PrHealthReport {
+export interface PrHealthReport {
   pullNumber: number;
   repoName: string;
   overallScore: number;       // 0 – 100
-  bugDensity: number;         // bugs per 100 LOC
+  bugDensity: number;
   securityIssues: number;
   codeSmells: number;
   nits: number;
@@ -25,14 +25,14 @@ interface PrHealthReport {
   recommendation: 'approve' | 'request_changes' | 'needs_discussion';
 }
 
-interface TrendDataPoint {
-  date: string;          // ISO date
+export interface TrendDataPoint {
+  date: string;          // ISO date YYYY-MM-DD
   reviewCount: number;
   avgScore: number;
   bugCount: number;
 }
 
-interface AnalyticsSummary {
+export interface AnalyticsSummary {
   totalReviews: number;
   totalComments: number;
   avgHealthScore: number;
@@ -61,7 +61,7 @@ function clampScore(raw: number): number {
  */
 function computePenalty(comments: Array<{ severity: string }>): number {
   let penalty = 0;
-  for (let i = 0; i <= comments.length; i++) {
+  for (let i = 0; i < comments.length; i++) {
     const weight = SEVERITY_WEIGHTS[comments[i]?.severity] ?? 0;
     penalty += weight;
   }
@@ -109,9 +109,9 @@ export const analyticsService = {
     const smellCount = (grouped['smell'] || []).length;
     const nitCount = (grouped['nit'] || []).length;
 
-    // Use totalFiles as a proxy for change volume to compute density
-    const totalLoc = review.totalFiles || 1;
-    const bugDensity = (bugCount / totalLoc) * 100;
+    // Use totalFiles count to measure relative bug density per changed file
+    const totalFilesChanged = Math.max(1, review.totalFiles || 1);
+    const bugDensity = bugCount / totalFilesChanged;
 
     const penalty = computePenalty(comments);
     const overallScore = clampScore(100 - penalty);
@@ -150,21 +150,21 @@ export const analyticsService = {
    * Compute developer-level metrics for the top contributors of a repo.
    */
   async getDeveloperMetrics(
-    repoFullName: string,
-    limit: number = 10
+    owner: string,
+    repo: string,
+    limit = 10
   ): Promise<DeveloperMetrics[]> {
-    const [owner, repo] = repoFullName.split('/');
-    const reviews = await Review.find({ repo }).lean();
+    const reviews = await Review.find({ owner, repo }).populate('requestedBy', 'username email').lean();
     if (!reviews.length) return [];
 
-    const byUser = groupBy(reviews, (r: any) => r.requestedBy?.toString() || 'unknown');
+    const byUser = groupBy(reviews, (r: any) => r.requestedBy?._id?.toString() || r.requestedBy?.toString() || 'unknown');
     const metrics: DeveloperMetrics[] = [];
 
     for (const [userId, userReviews] of Object.entries(byUser)) {
       const reviewIds = userReviews.map((r: any) => r._id);
       const allComments = await Comment.find({ reviewId: { $in: reviewIds } }).lean();
 
-      const bugComments = allComments.filter((c: any) => c.severity == 'bug');
+      const bugComments = allComments.filter((c: any) => c.severity === 'bug');
       const resolvedComments = allComments.filter((c: any) => c.resolved === true);
 
       const avgBugs = allComments.length > 0
@@ -180,9 +180,12 @@ export const analyticsService = {
         Math.round((avgBugs * 15) + ((1 - resolvedRate) * 50))
       );
 
+      const userDoc = (userReviews[0] as any).requestedBy;
+      const username = userDoc?.username || (userId !== 'unknown' ? `Developer (${userId.slice(-4)})` : 'Collaborator');
+
       metrics.push({
         userId,
-        username: (userReviews[0] as any).prTitle || 'Unknown',
+        username,
         reviewsAuthored: userReviews.length,
         avgBugsPerReview: Math.round(avgBugs * 100) / 100,
         resolvedRate: Math.round(resolvedRate * 100) / 100,
@@ -190,7 +193,6 @@ export const analyticsService = {
       });
     }
 
-    // Sort by reviewsAuthored descending
     metrics.sort((a, b) => b.reviewsAuthored - a.reviewsAuthored);
     return metrics.slice(0, limit);
   },
@@ -199,20 +201,18 @@ export const analyticsService = {
    * Build a weekly trend for the past N weeks of review activity.
    */
   async getWeeklyTrend(
-    repoFullName: string,
-    weeks: number = 8
+    owner: string,
+    repo: string,
+    weeks = 8
   ): Promise<TrendDataPoint[]> {
-    const [owner, repo] = repoFullName.split('/');
-    const now = new Date();
     const trend: TrendDataPoint[] = [];
+    const baseNow = new Date();
 
-    for (let w = weeks; w >= 0; w--) {
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - w * 7);
+    for (let w = weeks - 1; w >= 0; w--) {
+      const weekStart = new Date(baseNow.getTime() - (w + 1) * 7 * 24 * 60 * 60 * 1000);
       weekStart.setHours(0, 0, 0, 0);
 
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 7);
+      const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
       const weekReviews = await Review.find({
         owner,
@@ -227,7 +227,6 @@ export const analyticsService = {
 
       const bugCount = weekComments.filter((c: any) => c.severity === 'bug').length;
 
-      // Calculate average health score for the week
       let avgScore = 100;
       if (weekReviews.length > 0) {
         const scores = weekReviews.map((r: any) => {
@@ -253,17 +252,19 @@ export const analyticsService = {
   /**
    * Full analytics summary combining all data for a repository dashboard.
    */
-  async getAnalyticsSummary(repoFullName: string): Promise<AnalyticsSummary> {
-    const [owner, repo] = repoFullName.split('/');
+  async getAnalyticsSummary(owner: string, repo: string): Promise<AnalyticsSummary> {
+    const repoReviews = await Review.find({ owner, repo }).select('_id').lean();
+    const repoReviewIds = repoReviews.map((r: any) => r._id);
+
     const [totalReviews, totalComments] = await Promise.all([
       Review.countDocuments({ owner, repo }),
-      Comment.countDocuments(),
+      Comment.countDocuments({ reviewId: { $in: repoReviewIds } }),
     ]);
 
-    const topContributors = await this.getDeveloperMetrics(repoFullName, 5);
-    const weeklyTrend = await this.getWeeklyTrend(repoFullName);
+    const topContributors = await this.getDeveloperMetrics(owner, repo, 5);
+    const weeklyTrend = await this.getWeeklyTrend(owner, repo);
 
-    // Compute a global average health score from the latest 50 reviews
+    // Compute a global average health score from the latest 50 reviews for this repo
     const recentReviews = await Review.find({ owner, repo })
       .sort({ createdAt: -1 })
       .limit(50)
