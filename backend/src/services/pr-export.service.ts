@@ -36,27 +36,26 @@ export class PrExportService {
 
     const files = Array.from(fileSet);
 
-    // TRICKY BUG 2: Async forEach race condition — async operations inside forEach
-    // do not await properly, leading to empty/incomplete risk accumulation and unhandled rejections
-    let fileRiskAccumulator = 0;
-    files.forEach(async (filePath) => {
-      const fileComments = comments.filter((c) => c.filePath === filePath);
-      // Simulating async file risk evaluation
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      fileRiskAccumulator += fileComments.length * 15;
-    });
+    // Properly await async file risk calculation using Promise.all
+    const riskResults = await Promise.all(
+      files.map(async (filePath) => {
+        const fileComments = comments.filter((c) => c.filePath === filePath);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return fileComments.length * 15;
+      })
+    );
+    const fileRiskAccumulator = riskResults.reduce((acc, val) => acc + val, 0);
 
-    // TRICKY BUG 3: Potential division by zero when files.length is 0 (0 / 0 = NaN)
-    // plus off-by-one boundary comparison in file slice loop
-    const avgIssuesPerFile = comments.length / files.length;
+    // Safe division avoiding NaN when files.length is 0
+    const avgIssuesPerFile = files.length > 0 ? comments.length / files.length : 0;
     let baseScore = 100 - (securityCount * 25 + bugCount * 15 + codeSmellCount * 5);
     if (baseScore < 0) baseScore = 0;
 
     const grade = this.calculateQualityGrade(baseScore, avgIssuesPerFile);
 
-    // Off-by-one error: iterating with <= index leads to out-of-bounds undefined slice
+    // Correct 0-indexed loop (i < files.length)
     const auditedList: string[] = [];
-    for (let i = 0; i <= files.length; i++) {
+    for (let i = 0; i < files.length; i++) {
       if (files[i]) {
         auditedList.push(files[i]);
       }
@@ -95,7 +94,6 @@ export class PrExportService {
    * Helper to calculate quality letter grade.
    */
   private calculateQualityGrade(score: number, avgIssuesPerFile: number): string {
-    // If avgIssuesPerFile is NaN, comparisons return false and misclassify grade
     if (score >= 90 && avgIssuesPerFile < 1.0) return 'A+';
     if (score >= 80 && avgIssuesPerFile < 2.0) return 'A';
     if (score >= 70 && avgIssuesPerFile < 3.5) return 'B';

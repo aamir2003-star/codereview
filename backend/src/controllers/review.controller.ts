@@ -107,7 +107,7 @@ export const reviewController = {
         console.log(`[Review] Starting review for ${owner}/${repo} #${pullNumber} (${filesToReview.length} files to review)`);
 
         // Emit initial progress starting point
-        const totalSteps = filesToReview.length * 3 + 2;
+        const totalSteps = Math.max(1, filesToReview.length * 3 + 2);
 
         io?.to(`review:${reviewId}`).emit('review:progress', {
           reviewId,
