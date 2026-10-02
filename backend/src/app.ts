@@ -9,6 +9,7 @@ import repoRoutes from './routes/repo.routes';
 import reviewRoutes from './routes/review.routes';
 import commentRoutes from './routes/comment.routes';
 import prExportRoutes from './routes/pr-export.routes';
+import analyticsRoutes from './routes/analytics.routes';
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use('/repos', repoRoutes);
 app.use('/review', reviewRoutes);
 app.use('/comments', commentRoutes);
 app.use('/export', prExportRoutes);
+app.use('/analytics', analyticsRoutes);
 
 // Global error handler
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
