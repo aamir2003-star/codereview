@@ -4,8 +4,8 @@
   "description": "AI-Powered Code Review Copilot Backend",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:watch": "tsx watch src/server.ts",
+    "dev": "npm run build && node --watch dist/server.js",
+    "dev:watch": "npm run build && node --watch dist/server.js",
     "build": "tsc",
     "start": "node dist/server.js",
     "lint": "eslint src --ext .ts",
