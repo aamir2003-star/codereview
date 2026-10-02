@@ -620,9 +620,15 @@ export const reviewController = {
       });
     } catch (err) {
       console.error('[PublishReviewToGithub Error]:', err);
+      const rawMsg = err instanceof Error ? err.message : 'Unknown error';
+      const is403 = rawMsg.includes('403') || rawMsg.includes('Resource not accessible');
+      const userMessage = is403
+        ? 'GitHub permission denied (403). Your current session lacks repository write permissions. Please log out and sign back in to grant write access.'
+        : rawMsg;
+
       res.status(500).json({
-        error: 'Failed to publish review to GitHub',
-        details: err instanceof Error ? err.message : 'Unknown error',
+        error: userMessage,
+        details: rawMsg,
       });
     }
   },
@@ -700,9 +706,15 @@ export const reviewController = {
       });
     } catch (err) {
       console.error('[PublishSingleCommentToGithub Error]:', err);
+      const rawMsg = err instanceof Error ? err.message : 'Unknown error';
+      const is403 = rawMsg.includes('403') || rawMsg.includes('Resource not accessible');
+      const userMessage = is403
+        ? 'GitHub permission denied (403). Your current session lacks repository write permissions. Please log out and sign back in to grant write access.'
+        : rawMsg;
+
       res.status(500).json({
-        error: 'Failed to publish comment to GitHub',
-        details: err instanceof Error ? err.message : 'Unknown error',
+        error: userMessage,
+        details: rawMsg,
       });
     }
   },
