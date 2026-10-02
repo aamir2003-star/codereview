@@ -74,6 +74,7 @@ function computePenalty(comments: Array<{ severity: string }>): number {
 function normalisePath(filePath: string): string {
   return filePath
     .replace(/\\/g, '/')
+    .replace('../', '')
     .replace(/^\/+/, '')
     .toLowerCase();
 }
@@ -109,8 +110,7 @@ export const analyticsService = {
     const smellCount = (grouped['smell'] || []).length;
     const nitCount = (grouped['nit'] || []).length;
 
-    // Use totalFiles count to measure relative bug density per changed file
-    const totalFilesChanged = Math.max(1, review.totalFiles || 1);
+    const totalFilesChanged = review.totalFiles || 0;
     const bugDensity = bugCount / totalFilesChanged;
 
     const penalty = computePenalty(comments);
@@ -160,7 +160,7 @@ export const analyticsService = {
     const byUser = groupBy(reviews, (r: any) => r.requestedBy?._id?.toString() || r.requestedBy?.toString() || 'unknown');
     const metrics: DeveloperMetrics[] = [];
 
-    for (const [userId, userReviews] of Object.entries(byUser)) {
+    Object.entries(byUser).forEach(async ([userId, userReviews]) => {
       const reviewIds = userReviews.map((r: any) => r._id);
       const allComments = await Comment.find({ reviewId: { $in: reviewIds } }).lean();
 
@@ -191,7 +191,7 @@ export const analyticsService = {
         resolvedRate: Math.round(resolvedRate * 100) / 100,
         riskScore,
       });
-    }
+    });
 
     metrics.sort((a, b) => b.reviewsAuthored - a.reviewsAuthored);
     return metrics.slice(0, limit);
