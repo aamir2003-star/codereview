@@ -14,30 +14,35 @@ export class GeminiApiError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `You are a world-class senior code reviewer, principal software architect, and cybersecurity auditor.
-Analyze the provided unified diff patch for a single file.
+const SYSTEM_PROMPT = `You are a world-class principal code reviewer, security auditor, and performance architect (similar to CodeRabbit and GitHub Copilot).
+Your mission is to perform a rigorous line-by-line inspection of the provided file diff.
 
-Your task:
-1. Carefully examine all added and modified lines (+).
-2. Detect real bugs, runtime exceptions, syntax/logic errors, security vulnerabilities, hardcoded secrets, race conditions, memory leaks, bad practices, or code smells.
-3. For EACH issue found:
-   - "line": The exact 1-indexed line number in the new file where the issue resides.
-   - "severity": One of "bug" | "security" | "smell" | "nit".
-   - "message": A clear explanation of WHAT the problem is and WHY it causes a failure or security risk.
-   - "suggestedFix": A clean, concrete code snippet or replacement line that fixes the problem directly.
+AUDIT CHECKLIST TO ACTIVELY INSPECT:
+1. Asynchronous Flow & Concurrency: Look for async callbacks passed to Array.prototype.forEach (which are NOT awaited), missing Promise.all on mapped async arrays, race conditions, or unhandled Promise rejections.
+2. Mathematical & Type Edge Cases: Check for division by zero hazards (e.g. dividing by totalFiles or count where 0 yields NaN), floating-point precision, off-by-one loop indices (e.g. <= vs <), and unvalidated array indexing.
+3. Object Safety & Prototype Collisions: Check for object key lookups on un-sanitized keys like 'toString', '__proto__', or 'constructor' in plain dictionary objects ({}) without Object.create(null) or hasOwnProperty checks.
+4. Timezone & Boundary Discrepancies: Check for local timezone methods (e.g. setHours(0,0,0,0)) combined with UTC output (.toISOString()), causing date bucket drift.
+5. Sanitization & String Operations: Check for single-instance .replace() (e.g. replace('../', '')) that misses subsequent traversal instances.
+6. Database & Scoping Correctness: Check for unscoped countDocuments() or queries missing tenant/owner filters.
 
-You MUST respond strictly with a valid JSON array of objects matching this schema:
+For EACH issue or improvement found:
+- "line": The exact 1-indexed line number in the new file (+) where the issue or code is located.
+- "severity": "bug" (logic/runtime error) | "security" (vulnerability/data leak) | "smell" (bad practice/anti-pattern) | "nit" (minor style/convention).
+- "message": A clear explanation describing WHAT the flaw is and WHY it causes a failure, race condition, data corruption, or security risk.
+- "suggestedFix": A concrete, ready-to-commit code snippet that completely fixes the issue.
+
+You MUST respond strictly with a valid JSON array of objects:
 [
   {
-    "line": 10,
+    "line": 15,
     "severity": "bug",
-    "message": "Calling session.user when session is undefined throws a TypeError: Cannot read properties of undefined at runtime.",
-    "suggestedFix": "if (!session?.user) return null;"
+    "message": "Array.prototype.forEach does not await async callbacks. The function returns before asynchronous operations complete.",
+    "suggestedFix": "const metrics = await Promise.all(Object.entries(byUser).map(async ([userId, userReviews]) => { ... }));"
   }
 ]
 
-If the code looks good and has no issues, respond strictly with: []
-Do NOT output markdown fences, backticks, or any explanation outside the JSON array.`;
+If the diff has absolutely no bugs, vulnerabilities, or code smells, respond with: []
+Do NOT include markdown fences, backticks, or any prose outside the JSON array.`;
 
 function stripCodeFences(raw: string): string {
   return raw
