@@ -222,10 +222,23 @@ export const reviewController = {
             }
           } catch (err) {
             console.error(`[Review] Error analyzing ${file.filename}:`, err instanceof Error ? err.message : err);
+            const errMsg = err instanceof Error ? err.message : String(err);
+            const isHighDemand =
+              errMsg.includes('429') ||
+              errMsg.includes('503') ||
+              errMsg.includes('high demand') ||
+              errMsg.includes('UNAVAILABLE') ||
+              errMsg.includes('RESOURCE_EXHAUSTED') ||
+              errMsg.includes('quota');
+
+            if (isHighDemand) {
+              throw err; // Abort the review so it transitions to error state and shows high traffic dialog
+            }
+
             io?.to(`review:${reviewId}`).emit('file:error', {
               reviewId,
               filename: file.filename,
-              error: err instanceof Error ? err.message : 'Analysis failed',
+              error: errMsg || 'Analysis failed',
             });
           }
 
@@ -283,6 +296,7 @@ export const reviewController = {
         console.error('[Review] Processing failed:', err);
         const errMsg = err instanceof Error ? err.message : String(err);
         const isHighDemand =
+          errMsg.includes('429') ||
           errMsg.includes('503') ||
           errMsg.includes('high demand') ||
           errMsg.includes('UNAVAILABLE') ||
@@ -290,7 +304,7 @@ export const reviewController = {
           errMsg.includes('quota');
 
         const userMessage = isHighDemand
-          ? 'Google Gemini AI is experiencing temporary high demand spikes. Please wait a moment and click "AI Review Again".'
+          ? 'Due to heavy traffic on the AI review engine, we cannot review your code at this time. Please try again in a few moments.'
           : errMsg || 'Review process encountered an unexpected issue.';
 
         await Review.findByIdAndUpdate(review._id, { status: 'error' });
