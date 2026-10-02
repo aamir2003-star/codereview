@@ -51,7 +51,55 @@ function stripCodeFences(raw: string): string {
     .trim();
 }
 
+/**
+ * Resilient JSON parser that gracefully handles truncated AI responses
+ */
+function repairAndParseJsonArray(raw: string): any[] {
+  const cleaned = stripCodeFences(raw);
+  try {
+    return JSON.parse(cleaned);
+  } catch (firstErr) {
+    // Attempt 1: Find the last complete JSON object closing brace '}' and close the array
+    const lastBraceIdx = cleaned.lastIndexOf('}');
+    if (lastBraceIdx !== -1) {
+      const truncated = cleaned.slice(0, lastBraceIdx + 1) + '\n]';
+      try {
+        const parsed = JSON.parse(truncated);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        // Continue to fallback
+      }
+    }
+
+    // Attempt 2: Regex extraction of individual valid comment objects
+    const objects: any[] = [];
+    const objectRegex = /\{[\s\S]*?"line"\s*:\s*\d+[\s\S]*?"message"\s*:\s*"[^"]*"[\s\S]*?\}/g;
+    let match: RegExpExecArray | null;
+    while ((match = objectRegex.exec(cleaned)) !== null) {
+      try {
+        objects.push(JSON.parse(match[0]));
+      } catch {
+        // Skip unparseable chunk
+      }
+    }
+
+    if (objects.length > 0) return objects;
+    throw firstErr;
+  }
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const ACTIVE_GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-2.5-pro',
+  'gemini-1.5-pro',
+  'gemini-3-flash-preview',
+  'gemini-3.6-flash',
+  'gemini-flash-latest',
+];
 
 export const geminiService = {
   async reviewFileDiff(filename: string, patch: string): Promise<GeminiComment[]> {
@@ -67,25 +115,13 @@ export const geminiService = {
       patch.length > 25000 ? patch.slice(0, 25000) + '\n... [diff truncated]' : patch;
     const userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${trimmedPatch}\n\`\`\``;
 
-    // Resilient fallback chain of active Gemini models
-    const modelsToTry = [
-      'gemini-3.6-flash',
-      'gemini-3-flash-preview',
-      'gemini-3.1-flash-lite',
-      'gemini-3.5-flash-lite',
-      'gemini-3.5-flash',
-      'gemini-3.7-flash',
-      'gemini-3.8-flash',
-      'gemini-flash-latest',
-    ];
-
     let rawResponse = '';
     let lastError: unknown = null;
 
     // Retry loop with exponential backoff for transient 503 high demand / 429 rate limit spikes
     const maxRounds = 2;
     outerLoop: for (let round = 0; round < maxRounds; round++) {
-      for (const model of modelsToTry) {
+      for (const model of ACTIVE_GEMINI_MODELS) {
         try {
           console.log(`[Gemini] [Round ${round + 1}] Analyzing ${filename} using ${model}...`);
 
@@ -94,14 +130,14 @@ export const geminiService = {
             config: {
               systemInstruction: SYSTEM_PROMPT,
               temperature: 0.1,
-              maxOutputTokens: 2048,
+              maxOutputTokens: 8192,
               responseMimeType: 'application/json',
             },
             contents: userPrompt,
           });
 
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout after 12s for model ${model}`)), 12000)
+            setTimeout(() => reject(new Error(`Timeout after 14s for model ${model}`)), 14000)
           );
 
           const response: any = await Promise.race([apiCall, timeoutPromise]);
@@ -115,8 +151,7 @@ export const geminiService = {
           lastError = err;
           const msg = (err as Error).message || '';
           console.warn(`[Gemini] ${model} attempt failed for ${filename}:`, msg.slice(0, 120));
-          // Quick breather between model tries
-          await sleep(250);
+          await sleep(200);
         }
       }
 
@@ -135,11 +170,10 @@ export const geminiService = {
     }
 
     try {
-      const cleaned = stripCodeFences(rawResponse);
-      const parsed = JSON.parse(cleaned) as GeminiComment[];
+      const parsed = repairAndParseJsonArray(rawResponse) as GeminiComment[];
 
       if (!Array.isArray(parsed)) {
-        console.warn(`[Gemini] Response was not an array:`, cleaned);
+        console.warn(`[Gemini] Response was not an array:`, rawResponse);
         return [];
       }
 
@@ -240,22 +274,11 @@ Description: ${prDescription || 'No description provided.'}
 Files Changed:
 ${fileSummary}`;
 
-    const modelsToTry = [
-      'gemini-3.6-flash',
-      'gemini-3-flash-preview',
-      'gemini-3.1-flash-lite',
-      'gemini-3.5-flash-lite',
-      'gemini-3.5-flash',
-      'gemini-3.7-flash',
-      'gemini-3.8-flash',
-      'gemini-flash-latest',
-    ];
-
     let rawResponse = '';
     let lastError: unknown = null;
 
     for (let round = 0; round < 2; round++) {
-      for (const model of modelsToTry) {
+      for (const model of ACTIVE_GEMINI_MODELS) {
         try {
           console.log(`[Gemini] Generating PR architecture using ${model}...`);
           const apiCall = ai.models.generateContent({
@@ -263,7 +286,7 @@ ${fileSummary}`;
             config: {
               systemInstruction: ARCHITECTURE_SYSTEM_PROMPT,
               temperature: 0.2,
-              maxOutputTokens: 3000,
+              maxOutputTokens: 8192,
               responseMimeType: 'application/json',
             },
             contents: userPrompt,
@@ -282,7 +305,7 @@ ${fileSummary}`;
         } catch (err: any) {
           lastError = err;
           console.warn(`[Gemini] Model ${model} failed for PR architecture:`, err.message || err);
-          await sleep(250);
+          await sleep(200);
         }
       }
       if (rawResponse) break;
