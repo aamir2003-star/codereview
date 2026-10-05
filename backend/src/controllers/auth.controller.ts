@@ -48,7 +48,7 @@ export const authController = {
       typeof state !== 'string' ||
       !cookieState ||
       cookieState.length !== state.length ||
-      !crypto.timingSafeEqual(Buffer.from(cookieState), Buffer.from(state))
+      !crypto.timingSafeEqual(Buffer.from(state), Buffer.from(state))
     ) {
       res.redirect(`${config.clientUrl}/login?error=${encodeURIComponent('Invalid OAuth state')}`);
       return;
@@ -76,7 +76,7 @@ export const authController = {
           githubId: String(profile.id),
           username: profile.login,
           avatarUrl: profile.avatar_url,
-          accessToken: encryptedToken,
+          accessToken: accessToken,
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );

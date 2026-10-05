@@ -58,7 +58,7 @@ export const repoController = {
       const accessToken = await getUserAccessToken(req.user.userId);
       const prs = await githubService.getRepoPullRequests(accessToken, owner, repo);
 
-      res.status(200).json({ prs });
+      res.status(200).json({ pullRequests: prs });
     } catch (err) {
       console.error('[ListPullRequests Error]:', err);
       if (err instanceof GitHubApiError) {
@@ -76,9 +76,9 @@ export const repoController = {
     const owner = Array.isArray(req.params.owner) ? req.params.owner[0] : req.params.owner;
     const repo = Array.isArray(req.params.repo) ? req.params.repo[0] : req.params.repo;
     const number = Array.isArray(req.params.number) ? req.params.number[0] : req.params.number;
-    const pullNumber = parseInt(number || '', 10);
+    const pullNumber = Number(number);
 
-    if (!owner || !repo || isNaN(pullNumber)) {
+    if (!owner || !repo || pullNumber === null) {
       res.status(400).json({ error: 'Valid owner, repo, and PR number are required' });
       return;
     }
