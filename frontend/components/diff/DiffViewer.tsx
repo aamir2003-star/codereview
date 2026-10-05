@@ -704,6 +704,33 @@ export function DiffViewer({
                       );
                     })}
                   </div>
+
+                  {/* Render any out-of-hunk or file-level comments */}
+                  {(() => {
+                    const matchedLines = new Set(diffLines.map((l) => l.lineNum).filter(Boolean));
+                    const unmatched = currentComments.filter((c) => !matchedLines.has(c.lineNumber));
+                    if (unmatched.length === 0) return null;
+
+                    return (
+                      <div className="p-4 border-t border-[#333333] bg-[#141414] space-y-3">
+                        <div className="flex items-center gap-2 text-[#a1a1aa] font-mono text-xs">
+                          <Bug className="h-4 w-4 text-[#e3b341]" />
+                          <span>Additional File-Level Findings ({unmatched.length})</span>
+                        </div>
+                        {unmatched.map((c) => (
+                          <CommentCardInline
+                            key={c._id}
+                            comment={c}
+                            prUrl={pr.html_url}
+                            onResolve={onResolve}
+                            onUpvote={onUpvote}
+                            onPublishToGithub={handlePublishSingleComment}
+                            currentUserId={userId}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center text-sm text-[#858585]">
