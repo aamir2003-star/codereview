@@ -307,7 +307,10 @@ export const reviewController = {
           ? 'Due to heavy traffic on the AI review engine, we cannot review your code at this time. Please try again in a few moments.'
           : errMsg || 'Review process encountered an unexpected issue.';
 
-        await Review.findByIdAndUpdate(review._id, { status: 'error' });
+        await Review.findByIdAndUpdate(review._id, {
+          status: 'error',
+          errorMessage: userMessage,
+        });
         io?.to(`review:${reviewId}`).emit('review:error', {
           reviewId,
           isHighDemand,

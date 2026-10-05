@@ -50,6 +50,7 @@ export interface PersistedReview {
   architectureSummary?: PrArchitectureSummary;
   publishedToGithub?: boolean;
   githubReviewUrl?: string;
+  errorMessage?: string;
   createdAt: string;
   updatedAt: string;
 }
