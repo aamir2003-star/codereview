@@ -1,3 +1,5 @@
+import { handleSessionExpired } from '@/lib/auth-context';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
 export interface Repository {
@@ -70,6 +72,7 @@ export async function fetchRepos(token: string): Promise<Repository[]> {
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || 'Failed to fetch repositories');
   }
@@ -91,6 +94,7 @@ export async function fetchPullRequests(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || 'Failed to fetch pull requests');
   }
@@ -113,6 +117,7 @@ export async function fetchPullRequestDiff(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || 'Failed to fetch pull request diff');
   }

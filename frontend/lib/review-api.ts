@@ -1,3 +1,5 @@
+import { handleSessionExpired } from '@/lib/auth-context';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
 export type Severity = 'bug' | 'security' | 'smell' | 'nit';
@@ -81,6 +83,7 @@ export async function triggerReview(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to trigger review');
   }
@@ -95,6 +98,7 @@ export async function fetchReview(token: string, reviewId: string): Promise<Revi
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to fetch review');
   }
@@ -110,6 +114,7 @@ export async function stopReview(token: string, reviewId: string): Promise<{ suc
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to stop review');
   }
@@ -129,6 +134,7 @@ export async function fetchReviewByPr(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'No existing review found');
   }
@@ -147,6 +153,7 @@ export async function resolveComment(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to resolve comment');
   }
@@ -165,6 +172,7 @@ export async function upvoteComment(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to upvote comment');
   }
@@ -183,6 +191,7 @@ export async function publishReviewToGithub(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.details || err.error || 'Failed to publish review to GitHub');
   }
@@ -201,6 +210,7 @@ export async function publishSingleCommentToGithub(
   });
 
   if (!res.ok) {
+    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
     const err = await res.json().catch(() => ({}));
     throw new Error(err.details || err.error || 'Failed to publish comment to GitHub');
   }

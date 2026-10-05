@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { disconnectSocket } from '@/lib/socket';
 
@@ -25,6 +25,24 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 
+/**
+ * Global session-expired handler.
+ * Any module (api.ts, review-api.ts, etc.) can call this when it receives a 401.
+ * It clears the stale token, disconnects the socket, and redirects to /login
+ * so the user never sees a stale "logged-in" UI with a dead session.
+ */
+let _sessionExpiredFlag = false;
+export function handleSessionExpired() {
+  if (_sessionExpiredFlag) return;
+  _sessionExpiredFlag = true;
+
+  disconnectSocket();
+  localStorage.removeItem('auth_token');
+  sessionStorage.clear();
+
+  window.location.href = '/login';
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -46,7 +64,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         setToken(authToken);
         localStorage.setItem('auth_token', authToken);
+        _sessionExpiredFlag = false;
         return true;
+      } else if (response.status === 401) {
+        handleSessionExpired();
+        return false;
       } else {
         console.warn('[AuthProvider] /auth/me returned non-ok status:', response.status);
         localStorage.removeItem('auth_token');
@@ -78,14 +100,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = `${API_URL}/auth/github?_t=${Date.now()}`;
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     disconnectSocket();
     localStorage.removeItem('auth_token');
     sessionStorage.clear();
     setUser(null);
     setToken(null);
     router.push('/login');
-  };
+  }, [router]);
 
   const setAuthToken = async (newToken: string): Promise<boolean> => {
     setIsLoading(true);
