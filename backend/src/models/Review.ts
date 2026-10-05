@@ -32,6 +32,7 @@ export interface IReview extends Document {
   architectureSummary?: PrArchitectureSummary;
   publishedToGithub?: boolean;
   githubReviewUrl?: string;
+  errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +54,7 @@ const ReviewSchema = new Schema<IReview>(
       enum: ['pending', 'streaming', 'done', 'error'],
       default: 'pending',
     },
+    errorMessage: { type: String, default: '' },
     totalFiles: { type: Number, default: 0 },
     filesReviewed: { type: Number, default: 0 },
     totalComments: { type: Number, default: 0 },

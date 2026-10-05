@@ -266,6 +266,14 @@ export function DiffViewer({
     if (currentReview?.githubReviewUrl) {
       setPublishedReviewUrl(currentReview.githubReviewUrl);
     }
+    if (currentReview?.status === 'error') {
+      setReviewError({
+        message:
+          currentReview.errorMessage ||
+          'Due to heavy traffic on the AI review engine, we cannot review your code at this time. Please try again in a few moments.',
+        isHighDemand: true,
+      });
+    }
   }, [currentReview]);
 
   const { progress, isStreaming } = useReviewSocket({
