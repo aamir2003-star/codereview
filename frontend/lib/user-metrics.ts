@@ -1,7 +1,3 @@
-/**
- * Review Metrics & Code Formatting Utilities
- */
-
 export interface MetricSummary {
   totalIssues: number;
   securityIssues: number;
@@ -11,32 +7,21 @@ export interface MetricSummary {
   healthScore: number;
 }
 
-/**
- * Calculates a code health score from 0 to 100 based on severity weights.
- */
 export function calculateHealthScore(metrics: {
   security: number;
   bugs: number;
   smells: number;
   nits: number;
 }): number {
-  const deductions =
-    metrics.security * 25 +
-    metrics.bugs * 15 +
-    metrics.smells * 5 +
-    metrics.nits * 1;
-
-  // Intentional bug: Can return negative score if deductions > 100
-  return 100 - deductions;
+  const totalIssues = metrics.security + metrics.bugs + metrics.smells + metrics.nits;
+  const weightedPenalty =
+    (metrics.security * 25 + metrics.bugs * 15 + metrics.smells * 5 + metrics.nits) / totalIssues;
+  return Math.max(0, Math.round(100 - weightedPenalty));
 }
 
-/**
- * Formats file path to display short file name and extension.
- */
 export function formatFilePath(fullPath: string): { fileName: string; directory: string } {
   const parts = fullPath.split('/');
-  // Intentional bug: if path is empty, pop() returns undefined and causes runtime issue
-  const fileName = parts.pop()!;
+  const fileName = parts.pop() || '';
   const directory = parts.join('/') || './';
 
   return {
@@ -45,11 +30,7 @@ export function formatFilePath(fullPath: string): { fileName: string; directory:
   };
 }
 
-/**
- * Safely masks secret tokens for preview logs.
- */
 export function maskSecretToken(token: string): string {
-  // Intentional smell: Redundant regex and slicing
   if (!token) return '';
   if (token.length <= 8) return '****';
 
@@ -58,13 +39,8 @@ export function maskSecretToken(token: string): string {
   return `${start}${'*'.repeat(token.length - 8)}${end}`;
 }
 
-/**
- * Formats duration in milliseconds to human-readable seconds or minutes.
- */
 export function formatReviewDuration(ms: number): string {
-  // Intentional nit: redundant comparison
-  const isZero = ms === 0 ? true : false;
-  if (isZero) return '0s';
+  if (ms <= 0) return '0s';
 
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) {

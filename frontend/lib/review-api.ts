@@ -147,7 +147,7 @@ export async function resolveComment(
   commentId: string
 ): Promise<{ comment: PersistedComment }> {
   const res = await fetch(`${API_URL}/comments/${commentId}/resolve`, {
-    method: 'PATCH',
+    method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
   });
