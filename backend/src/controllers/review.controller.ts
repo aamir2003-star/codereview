@@ -222,15 +222,34 @@ export const reviewController = {
       return;
     }
 
-    const review = await Review.create({
-      prUrl: prUrl || `https://github.com/${owner}/${repo}/pull/${pullNumber}`,
-      owner,
-      repo,
-      pullNumber,
-      prTitle: prTitle || `PR #${pullNumber}`,
-      requestedBy: new mongoose.Types.ObjectId(req.user.userId),
-      status: 'pending',
-    });
+    // Smart Cache: Check if a review already exists for this PR
+    let review = await Review.findOne({ owner, repo, pullNumber });
+    let existingCommentsList: Array<{ filePath: string; line: number; message: string }> = [];
+
+    if (review) {
+      // Re-run requested: fetch existing comments to skip them
+      console.log(`[Review] Re-running review for ${owner}/${repo} #${pullNumber}. Fetching existing comments to prevent duplicates.`);
+      const existingDocs = await Comment.find({ reviewId: review._id });
+      existingCommentsList = existingDocs.map(c => ({
+        filePath: c.filePath,
+        line: c.lineNumber,
+        message: c.message
+      }));
+      // Reset status to pending
+      review.status = 'pending';
+      await review.save();
+    } else {
+      // First time reviewing this PR
+      review = await Review.create({
+        prUrl: prUrl || `https://github.com/${owner}/${repo}/pull/${pullNumber}`,
+        owner,
+        repo,
+        pullNumber,
+        prTitle: prTitle || `PR #${pullNumber}`,
+        requestedBy: new mongoose.Types.ObjectId(req.user.userId),
+        status: 'pending',
+      });
+    }
 
     const reviewId = review._id.toString();
     activeReviewAborts.set(reviewId, false);
@@ -272,27 +291,35 @@ export const reviewController = {
           totalComments: 0,
         });
 
-        // Generate CodeRabbit-style PR Architecture & Walkthrough
-        try {
-          console.log(`[Review] Generating PR Architecture summary for #${pullNumber}...`);
-          const architectureSummary = await geminiService.generatePrArchitecture(
-            prTitle || `PR #${pullNumber}`,
-            '',
-            filesToReview.map((f) => ({
-              filename: f.filename,
-              patch: f.patch,
-              additions: f.additions,
-              deletions: f.deletions,
-            }))
-          );
-
-          await Review.findByIdAndUpdate(review._id, { architectureSummary });
+        // Generate or re-use CodeRabbit-style PR Architecture & Walkthrough
+        if (review.architectureSummary && review.architectureSummary.highLevelSummary) {
+          console.log(`[Review] Using existing PR Architecture summary for #${pullNumber}.`);
           io?.to(`review:${reviewId}`).emit('review:architecture', {
             reviewId,
-            architecture: architectureSummary,
+            architecture: review.architectureSummary,
           });
-        } catch (archErr) {
-          console.warn('[Review] Failed to generate architecture summary:', archErr);
+        } else {
+          try {
+            console.log(`[Review] Generating PR Architecture summary for #${pullNumber}...`);
+            const architectureSummary = await geminiService.generatePrArchitecture(
+              prTitle || `PR #${pullNumber}`,
+              '',
+              filesToReview.map((f) => ({
+                filename: f.filename,
+                patch: f.patch,
+                additions: f.additions,
+                deletions: f.deletions,
+              }))
+            );
+
+            await Review.findByIdAndUpdate(review._id, { architectureSummary });
+            io?.to(`review:${reviewId}`).emit('review:architecture', {
+              reviewId,
+              architecture: architectureSummary,
+            });
+          } catch (archErr) {
+            console.warn('[Review] Failed to generate architecture summary:', archErr);
+          }
         }
 
         io?.to(`review:${reviewId}`).emit('review:progress', {
@@ -413,13 +440,15 @@ export const reviewController = {
                     console.log(`[Review] Injecting ${contextFiles.length} context file(s) for ${file.filename} (${staticContext.length} from repo, ${dynamicContext.length} from PR)`);
                   }
 
-                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
+                  const existingForFile = existingCommentsList.filter(c => c.filePath === file.filename);
+
+                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles, existingForFile);
 
                   // Phase 4: Run dedicated security scanner on sensitive files
                   if (isSecuritySensitive(file.filename)) {
                     console.log(`[Security] Running security scan on ${file.filename}...`);
                     try {
-                      const secComments = await geminiService.securityScanFile(file.filename, file.patch, contextFiles);
+                      const secComments = await geminiService.securityScanFile(file.filename, file.patch, contextFiles, existingForFile);
                       // Deduplicate: only add security comments that don't overlap with existing
                       for (const sc of secComments) {
                         const isDuplicate = comments.some(
@@ -541,7 +570,8 @@ export const reviewController = {
               filesToReview
                 .filter((f) => f.patch)
                 .map((f) => ({ filename: f.filename, patch: f.patch! })),
-              allStaticContext.length > 0 ? allStaticContext : undefined
+              allStaticContext.length > 0 ? allStaticContext : undefined,
+              existingCommentsList.filter(c => c.filePath === 'cross-file')
             );
 
             if (crossFileComments.length > 0) {
