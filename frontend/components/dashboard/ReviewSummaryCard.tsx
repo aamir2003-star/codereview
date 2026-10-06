@@ -9,7 +9,7 @@ interface ReviewSummaryCardProps {
   notice?: string;
 }
 
-export function ReviewSummaryCard({
+export const ReviewSummaryCard = React.memo(function ReviewSummaryCard({
   repoName,
   totalPRs,
   unresolvedCount = 0,
@@ -99,4 +99,4 @@ export function ReviewSummaryCard({
       )}
     </div>
   );
-}
+});

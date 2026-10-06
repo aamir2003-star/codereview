@@ -9,3 +9,7 @@ export function setIO(io: Server): void {
 export function getIO(): Server | null {
   return ioInstance;
 }
+
+export function isSocketInitialized(): boolean {
+  return ioInstance !== null;
+}

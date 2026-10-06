@@ -31,7 +31,7 @@ function isSafePublicWebhookUrl(urlString: string): boolean {
     const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
     const match = hostname.match(ipv4Regex);
     if (match) {
-      const [_, o1, o2] = match.map(Number);
+      const [o1, o2] = match.map(Number);
       if (o1 === 127) return false; // Loopback
       if (o1 === 10) return false; // Class A private
       if (o1 === 169 && o2 === 254) return false; // Link-local / Cloud metadata (AWS/GCP/Azure)
