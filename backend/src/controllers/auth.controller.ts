@@ -41,7 +41,7 @@ export const authController = {
       .map((cookie) => cookie.trim())
       .find((cookie) => cookie.startsWith('github_oauth_state='))
       ?.split('=')[1];
-    res.clearCookie('github_oauth_state', { path: '/auth/github/callback' });
+    res.clearCookie('github_oauth_state', { path: '/auth' });
 
     if (
       !state ||

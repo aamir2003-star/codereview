@@ -404,7 +404,7 @@ export const reviewController = {
                 const file = filesToReview[i];
                 if (!file) break;
 
-                const currentPercent = Math.min(94, Math.round(((filesReviewedCount + 0.5) / filesToReview.length) * 85) + 10);
+                const currentPercent = Math.min(94, Math.round(((filesReviewedCount++) / filesToReview.length) * 85) + 10);
 
                 io?.to(`review:${reviewId}`).emit('review:progress', {
                   reviewId,
@@ -852,7 +852,7 @@ export const reviewController = {
     }
 
     try {
-      const review = await Review.findById(reviewId);
+      const review = await Review.findOne({ _id: reviewId, requestedBy: userId });
       if (!review) {
         res.status(404).json({ error: 'Review not found' });
         return;
