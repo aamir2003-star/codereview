@@ -41,7 +41,7 @@ export function decrypt(cipherText: string): string {
   
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
-  const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), iv);
+  const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), ivHex as any);
   
   decipher.setAuthTag(authTag);
   
