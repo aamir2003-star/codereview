@@ -98,30 +98,17 @@ export default function DashboardPage() {
     return () => { mounted = false; };
   }, [token, selectedRepo]);
 
-  // Poll review status while review is in progress
-  const pollReview = useCallback(
-    async (id: string) => {
-      if (!token || !isPollingRef.current) return;
-      try {
-        const { review, comments } = await fetchReview(token, id);
-        if (!isPollingRef.current) return;
-        setCurrentReview(review);
-        setReviewComments(comments);
+  const handleReviewComplete = useCallback(({ totalComments }: { totalComments: number }) => {
+    stopPolling();
+    setIsReviewing(false);
+    setCurrentReview((prev) => (prev ? { ...prev, status: 'done', totalComments } : prev));
+  }, [stopPolling]);
 
-        if (review.status === 'done' || review.status === 'error') {
-          stopPolling();
-          setIsReviewing(false);
-        } else {
-          pollTimerRef.current = setTimeout(() => pollReview(id), 3000);
-        }
-      } catch (err) {
-        console.error('Poll review error:', err);
-        stopPolling();
-        setIsReviewing(false);
-      }
-    },
-    [token, stopPolling]
-  );
+  const handleReviewError = useCallback(({ message }: { message: string }) => {
+    stopPolling();
+    setIsReviewing(false);
+    setCurrentReview((prev) => (prev ? { ...prev, status: 'error', errorMessage: message } : prev));
+  }, [stopPolling]);
 
   // Open diff modal and check for existing review
   const handleInspectDiff = async (pr: PullRequest) => {
@@ -141,11 +128,8 @@ export default function DashboardPage() {
           setCurrentReview(review);
           setReviewComments(comments);
           setReviewId(review._id);
-          // If it's still running, start polling
           if (review.status === 'streaming' || review.status === 'pending') {
-            isPollingRef.current = true;
             setIsReviewing(true);
-            pollReview(review._id);
           }
         })
         .catch(() => { /* No existing review — that's fine */ }),
@@ -161,7 +145,6 @@ export default function DashboardPage() {
   const handleStartReview = async () => {
     if (!token || !selectedRepo || !inspectingPr) return;
     stopPolling();
-    isPollingRef.current = true;
     setIsReviewing(true);
     setCurrentReview(undefined);
     setReviewComments([]);
@@ -175,7 +158,6 @@ export default function DashboardPage() {
         prTitle: inspectingPr.title,
       });
       setReviewId(newId);
-      pollReview(newId);
     } catch (err) {
       console.error('Start review error:', err);
       setIsReviewing(false);
@@ -397,6 +379,8 @@ export default function DashboardPage() {
           onNewComment={handleNewComment}
           onCommentResolved={handleCommentResolved}
           onCommentUpvoted={handleCommentUpvoted}
+          onReviewComplete={handleReviewComplete}
+          onReviewError={handleReviewError}
         />
       )}
     </div>

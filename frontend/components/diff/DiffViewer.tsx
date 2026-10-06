@@ -57,6 +57,8 @@ interface DiffViewerProps {
   onNewComment?: (comment: PersistedComment) => void;
   onCommentResolved?: (data: { commentId: string; resolved: boolean }) => void;
   onCommentUpvoted?: (data: { commentId: string; upvotes: string[] }) => void;
+  onReviewComplete?: (data: { totalComments: number }) => void;
+  onReviewError?: (data: { reviewId: string; message: string; isHighDemand?: boolean }) => void;
 }
 
 const SEVERITY_ICONS = {
@@ -245,6 +247,8 @@ export function DiffViewer({
   onNewComment,
   onCommentResolved,
   onCommentUpvoted,
+  onReviewComplete,
+  onReviewError,
 }: DiffViewerProps) {
   const [activeTab, setActiveTab] = useState<'architecture' | 'diff'>('architecture');
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
@@ -291,11 +295,15 @@ export function DiffViewer({
     onArchitectureSummary: (data) => {
       setLocalArchitecture(data.architecture);
     },
+    onReviewComplete: (data) => {
+      onReviewComplete?.(data);
+    },
     onReviewError: (data) => {
       setReviewError({
         message: data.message,
         isHighDemand: data.isHighDemand,
       });
+      onReviewError?.(data);
     },
   });
 

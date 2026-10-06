@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -11,6 +12,9 @@ import commentRoutes from './routes/comment.routes';
 import prExportRoutes from './routes/pr-export.routes';
 
 const app = express();
+
+// Enable Gzip/Brotli response compression for all API payloads (diffs, reviews, comment lists)
+app.use(compression());
 
 // Disable ETag generation to prevent 304 Not Modified responses on dynamic JSON APIs
 app.set('etag', false);
