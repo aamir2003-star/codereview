@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
@@ -11,9 +11,13 @@ function CallbackHandler() {
   const searchParams = useSearchParams();
   const { setAuthToken } = useAuth();
   const [authenticated, setAuthenticated] = useState(false);
+  const processedRef = useRef(false);
   const finishLogin = useCallback(() => router.replace('/dashboard'), [router]);
 
   useEffect(() => {
+    if (processedRef.current) return;
+    processedRef.current = true;
+
     const token = searchParams.get('token');
     const error = searchParams.get('error');
 
