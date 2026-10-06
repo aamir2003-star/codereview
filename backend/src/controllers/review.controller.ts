@@ -51,6 +51,90 @@ function isReviewableFile(filename: string): boolean {
   return true;
 }
 
+// Phase 2: Cross-file context mapping
+// Maps file patterns to related files that should be included as context
+const CONTEXT_RULES: Array<{
+  pattern: RegExp;
+  relatedPatterns: RegExp[];
+  description: string;
+}> = [
+  {
+    pattern: /frontend\/lib\/(api|review-api|repo-api)\.ts/,
+    relatedPatterns: [/backend\/src\/routes\//],
+    description: 'Frontend API calls need backend route definitions for method/path verification',
+  },
+  {
+    pattern: /backend\/src\/controllers\//,
+    relatedPatterns: [/backend\/src\/models\//, /backend\/src\/middleware\//],
+    description: 'Controllers need model schemas for type verification',
+  },
+  {
+    pattern: /backend\/src\/middleware\//,
+    relatedPatterns: [/backend\/src\/controllers\//, /backend\/src\/config\//],
+    description: 'Middleware needs controller and config context',
+  },
+  {
+    pattern: /backend\/src\/services\//,
+    relatedPatterns: [/backend\/src\/models\//, /backend\/src\/controllers\//],
+    description: 'Services need model schemas and consumer controllers',
+  },
+  {
+    pattern: /frontend\/hooks\//,
+    relatedPatterns: [/frontend\/components\//, /frontend\/lib\//],
+    description: 'Hooks need component and library context',
+  },
+  {
+    pattern: /frontend\/components\//,
+    relatedPatterns: [/frontend\/hooks\//, /frontend\/lib\//],
+    description: 'Components need hooks and API context',
+  },
+  {
+    pattern: /backend\/src\/models\//,
+    relatedPatterns: [/backend\/src\/controllers\//],
+    description: 'Models need controller context to verify query consistency',
+  },
+];
+
+function getRelatedFiles(
+  filename: string,
+  allFiles: Array<{ filename: string; patch?: string }>
+): Array<{ filename: string; snippet: string }> {
+  const related: Array<{ filename: string; snippet: string }> = [];
+
+  for (const rule of CONTEXT_RULES) {
+    if (rule.pattern.test(filename)) {
+      for (const relatedPattern of rule.relatedPatterns) {
+        for (const file of allFiles) {
+          if (relatedPattern.test(file.filename) && file.filename !== filename && file.patch) {
+            related.push({ filename: file.filename, snippet: file.patch });
+          }
+        }
+      }
+    }
+  }
+
+  return related;
+}
+
+// Phase 4: Security-sensitive file patterns
+const SECURITY_PATTERNS = [
+  /middleware\/auth/i,
+  /controllers\/auth/i,
+  /middleware/i,
+  /\.middleware\./i,
+  /controllers\/repo/i,
+  /services\/github/i,
+  /config\/env/i,
+  /crypto/i,
+  /session/i,
+  /cookie/i,
+  /passport/i,
+];
+
+function isSecuritySensitive(filename: string): boolean {
+  return SECURITY_PATTERNS.some((pattern) => pattern.test(filename));
+}
+
 export const reviewController = {
   /**
    * POST /review
@@ -193,7 +277,33 @@ export const reviewController = {
                 try {
                   console.log(`[Review] Analyzing file [${i + 1}/${filesToReview.length}]: ${file.filename} (${file.patch.length} chars)`);
 
-                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch);
+                  // Phase 2: Gather cross-file context for this file
+                  const contextFiles = getRelatedFiles(file.filename, filesToReview);
+                  if (contextFiles.length > 0) {
+                    console.log(`[Review] Injecting ${contextFiles.length} context file(s) for ${file.filename}`);
+                  }
+
+                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
+
+                  // Phase 4: Run dedicated security scanner on sensitive files
+                  if (isSecuritySensitive(file.filename)) {
+                    console.log(`[Security] Running security scan on ${file.filename}...`);
+                    try {
+                      const secComments = await geminiService.securityScanFile(file.filename, file.patch, contextFiles);
+                      // Deduplicate: only add security comments that don't overlap with existing
+                      for (const sc of secComments) {
+                        const isDuplicate = comments.some(
+                          (c) => Math.abs(c.line - sc.line) <= 2 && c.severity === sc.severity
+                        );
+                        if (!isDuplicate) {
+                          comments.push(sc);
+                        }
+                      }
+                      console.log(`[Security] Found ${secComments.length} security-specific issues in ${file.filename}`);
+                    } catch (secErr) {
+                      console.warn(`[Security] Security scan failed for ${file.filename}:`, secErr instanceof Error ? secErr.message : secErr);
+                    }
+                  }
 
                   if (comments.length > 0) {
                     const docs = await Comment.insertMany(
@@ -269,6 +379,57 @@ export const reviewController = {
         }
 
         await Promise.all(workers);
+
+        // Phase 3: Cross-file integration review — analyze ALL files together
+        if (!activeReviewAborts.get(reviewId) && filesToReview.length > 1) {
+          try {
+            io?.to(`review:${reviewId}`).emit('review:progress', {
+              reviewId,
+              filesReviewed: filesReviewedCount,
+              totalFiles: filesToReview.length,
+              percent: 96,
+              stage: 'Running cross-file integration analysis...',
+              currentFile: 'Cross-File Consistency Check',
+              totalComments,
+            });
+
+            console.log(`[Review] Starting cross-file integration review for ${filesToReview.length} files...`);
+
+            const crossFileComments = await geminiService.crossFileIntegrationReview(
+              filesToReview
+                .filter((f) => f.patch)
+                .map((f) => ({ filename: f.filename, patch: f.patch! }))
+            );
+
+            if (crossFileComments.length > 0) {
+              // Assign cross-file comments to the first mentioned file in the message
+              const crossDocs = await Comment.insertMany(
+                crossFileComments.map((c) => ({
+                  reviewId: review._id,
+                  filePath: 'cross-file',
+                  lineNumber: c.line,
+                  severity: c.severity,
+                  message: c.message,
+                  suggestedFix: c.suggestedFix || undefined,
+                }))
+              );
+
+              totalComments += crossDocs.length;
+              console.log(`[Review] Cross-file review found ${crossDocs.length} integration issues.`);
+
+              for (const doc of crossDocs) {
+                io?.to(`review:${reviewId}`).emit('comment:new', {
+                  reviewId,
+                  comment: doc.toObject(),
+                });
+              }
+            } else {
+              console.log('[Review] Cross-file review found no integration issues.');
+            }
+          } catch (crossErr) {
+            console.warn('[Review] Cross-file integration review failed (non-fatal):', crossErr instanceof Error ? crossErr.message : crossErr);
+          }
+        }
 
         // Review completed
         const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);

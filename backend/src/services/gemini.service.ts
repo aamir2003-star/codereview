@@ -23,7 +23,13 @@ AUDIT CHECKLIST TO ACTIVELY INSPECT:
 3. Object Safety & Prototype Collisions: Check for object key lookups on un-sanitized keys like 'toString', '__proto__', or 'constructor' in plain dictionary objects ({}) without Object.create(null) or hasOwnProperty checks.
 4. Timezone & Boundary Discrepancies: Check for local timezone methods (e.g. setHours(0,0,0,0)) combined with UTC output (.toISOString()), causing date bucket drift.
 5. Sanitization & String Operations: Check for single-instance .replace() (e.g. replace('../', '')) that misses subsequent traversal instances.
-6. Database & Scoping Correctness: Check for unscoped countDocuments() or queries missing tenant/owner filters.
+6. Database & Scoping Correctness: Check for unscoped countDocuments() or queries missing tenant/owner filters. Check that query filter field types match the schema (e.g. comparing a plain string against a Mongoose ObjectId field will silently return no results).
+7. Regex Injection & ReDoS: Flag ANY use of new RegExp(userInput) or new RegExp(variable) where the argument originates from request params, query, body, or any external/untrusted source without prior escaping (e.g. escapeRegExp). Unescaped user input in RegExp enables Regular Expression Denial of Service (ReDoS) via catastrophic backtracking.
+8. Cookie & Session Path Matching: When reviewing setCookie/clearCookie or cookie options, verify that the 'path' option matches EXACTLY between set and clear operations. A mismatched path (e.g. setting with path '/auth/github/callback' but clearing with path '/auth') means the cookie is NEVER actually cleared, causing stale state accumulation.
+9. Increment/Decrement Operator Side-Effects: In expressions like arr[i++], fn(count++), or calculations using count++, the post-increment returns the OLD value AND mutates the variable as a side-effect. Flag when post-increment/decrement is used inside calculations, function arguments, or concurrent/async code where the mutation may cause double-counting or off-by-one errors.
+10. Cleanup & Teardown Symmetry: For every .on(), .addEventListener(), .subscribe(), or event registration, verify the cleanup/teardown/unmount function has a MATCHING .off(), .removeEventListener(), or .unsubscribe(). Compare every registration against its cleanup — a single missing pair causes memory leaks and duplicate handler accumulation on reconnect/remount.
+11. Double Encoding & URL Construction: Check for encodeURIComponent() applied to values that are already URL-safe or will be double-encoded. Also check for INCONSISTENT encoding where some path segments are encoded but others are not.
+12. HTTP Method Consistency: When the file makes HTTP requests (fetch, axios, etc.), check that the HTTP method (GET, POST, PUT, PATCH, DELETE) matches what the target API endpoint expects. A mismatch (e.g. POST instead of PATCH) will result in 404/405 errors.
 
 For EACH issue or improvement found:
 - "line": The exact 1-indexed line number in the new file (+) where the issue or code is located.
@@ -100,7 +106,11 @@ const ACTIVE_GEMINI_MODELS = [
 ];
 
 export const geminiService = {
-  async reviewFileDiff(filename: string, patch: string): Promise<GeminiComment[]> {
+  async reviewFileDiff(
+    filename: string,
+    patch: string,
+    contextFiles?: Array<{ filename: string; snippet: string }>
+  ): Promise<GeminiComment[]> {
     if (!config.geminiApiKey) {
       throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
     }
@@ -111,7 +121,24 @@ export const geminiService = {
     // Truncate overly long patches to prevent timeout on massive files
     const trimmedPatch =
       patch.length > 25000 ? patch.slice(0, 25000) + '\n... [diff truncated]' : patch;
-    const userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${trimmedPatch}\n\`\`\``;
+
+    let userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${trimmedPatch}\n\`\`\``;
+
+    // Phase 2: Inject cross-file context so AI can cross-reference related files
+    if (contextFiles && contextFiles.length > 0) {
+      userPrompt += '\n\n## Related Context Files (cross-reference for consistency)\n';
+      userPrompt +=
+        'Verify that HTTP methods, type signatures, route paths, schema field types, ' +
+        'cookie paths, and event listener patterns in the reviewed file are CONSISTENT ' +
+        'with these context files.\n\n';
+      for (const ctx of contextFiles) {
+        const trimmedSnippet =
+          ctx.snippet.length > 3000
+            ? ctx.snippet.slice(0, 3000) + '\n... [truncated]'
+            : ctx.snippet;
+        userPrompt += `### ${ctx.filename}\n\`\`\`\n${trimmedSnippet}\n\`\`\`\n\n`;
+      }
+    }
 
     let rawResponse = '';
     let lastError: unknown = null;
@@ -349,6 +376,239 @@ ${fileSummary}`;
         walkthrough: [],
         potentialRisks: [],
       };
+    }
+  },
+
+  /**
+   * Phase 3: Cross-file integration review
+   * Reviews all changed files TOGETHER to catch cross-file consistency bugs
+   * that no single-file review can detect.
+   */
+  async crossFileIntegrationReview(
+    files: Array<{ filename: string; patch: string }>
+  ): Promise<GeminiComment[]> {
+    if (!config.geminiApiKey) {
+      throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+
+    const CROSS_FILE_PROMPT = `You are a Principal Integration Architect performing a CROSS-FILE consistency review.
+
+You are given ALL files changed in a Pull Request. Your job is to find bugs that ONLY appear when comparing files against each other — issues that are INVISIBLE when reviewing any single file in isolation.
+
+CROSS-FILE CHECKS:
+1. HTTP Method Mismatches: Frontend API calls use one HTTP method (e.g. POST) but the backend route expects a different one (e.g. PATCH). This causes 404/405 errors at runtime.
+2. Type Mismatches Across Boundaries: A controller passes a string where a Mongoose model schema expects ObjectId, or vice versa. The query silently returns null/empty.
+3. Route Path Mismatches: Frontend calls /api/foo but backend registers /api/bar.
+4. Schema Changes Breaking Queries: A model index or field was changed, but existing queries in controllers still use the old field names or assumptions.
+5. Cookie/Session Path Inconsistencies: setCookie in one file uses path '/a/b' but clearCookie in another file uses path '/a'.
+6. Event/Message Contract Mismatches: Socket.io emit in backend uses event name 'x' but frontend listens for 'y', or payload shapes differ.
+7. Shared State Assumptions: One file assumes a variable is a number, another treats it as a string.
+8. Import/Export Mismatches: A function signature changed in the source file but callers still use the old signature.
+
+For EACH cross-file issue found:
+- "line": The line number in the file where the SYMPTOM appears (the consuming/calling side).
+- "severity": "bug" | "security" | "smell"
+- "message": Explain BOTH files involved: "In [fileA] line X, ... but in [fileB] line Y, ... This causes ..."
+- "suggestedFix": The code fix for the file containing the bug.
+
+Respond with a valid JSON array. If no cross-file issues found, respond with [].
+Do NOT include markdown fences or prose outside the JSON array.`;
+
+    // Build combined diff context (limit total size to avoid timeouts)
+    let combinedDiffs = '';
+    let totalChars = 0;
+    const MAX_TOTAL_CHARS = 40000;
+
+    for (const file of files) {
+      const snippet = file.patch.length > 4000 ? file.patch.slice(0, 4000) + '\n...[truncated]' : file.patch;
+      if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
+      combinedDiffs += `\n### File: ${file.filename}\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
+      totalChars += snippet.length;
+    }
+
+    const userPrompt = `All changed files in this PR:\n${combinedDiffs}`;
+
+    let rawResponse = '';
+    let lastError: unknown = null;
+
+    for (let round = 0; round < 2; round++) {
+      for (const model of ACTIVE_GEMINI_MODELS) {
+        try {
+          console.log(`[Gemini] [Cross-File Pass] Analyzing ${files.length} files together using ${model}...`);
+
+          const apiCall = ai.models.generateContent({
+            model,
+            config: {
+              systemInstruction: CROSS_FILE_PROMPT,
+              temperature: 0.1,
+              maxOutputTokens: 8192,
+              responseMimeType: 'application/json',
+            },
+            contents: userPrompt,
+          });
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout after 20s for cross-file model ${model}`)), 20000)
+          );
+
+          const response: any = await Promise.race([apiCall, timeoutPromise]);
+          rawResponse = response.text ?? '';
+
+          if (rawResponse) {
+            console.log(`[Gemini] Cross-file review completed using ${model}`);
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+          const msg = (err as Error).message || '';
+          console.warn(`[Gemini] Cross-file ${model} failed:`, msg.slice(0, 120));
+          await sleep(300);
+        }
+      }
+      if (rawResponse) break;
+      await sleep(1500);
+    }
+
+    if (!rawResponse) {
+      console.warn('[Gemini] Cross-file integration review failed, skipping.');
+      return [];
+    }
+
+    try {
+      const parsed = repairAndParseJsonArray(rawResponse) as GeminiComment[];
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .filter(
+          (c) =>
+            typeof c.line === 'number' &&
+            typeof c.message === 'string' &&
+            ['bug', 'security', 'smell', 'nit'].includes(c.severity)
+        )
+        .map((c) => ({
+          line: Math.max(1, Math.floor(c.line)),
+          severity: c.severity,
+          message: `[Cross-File] ${c.message}`,
+          suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
+        }));
+    } catch (err) {
+      console.error('[Gemini] Cross-file parse error:', rawResponse);
+      return [];
+    }
+  },
+
+  /**
+   * Phase 4: Dedicated security scanner for auth/security-sensitive files.
+   * Uses a hardened OWASP-focused prompt.
+   */
+  async securityScanFile(
+    filename: string,
+    patch: string,
+    contextFiles?: Array<{ filename: string; snippet: string }>
+  ): Promise<GeminiComment[]> {
+    if (!config.geminiApiKey) {
+      throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+
+    const SECURITY_PROMPT = `You are a Senior Application Security Engineer performing a dedicated security audit.
+This file has been flagged as security-sensitive (authentication, authorization, middleware, database queries, user input handling, or cookie/session management).
+
+MANDATORY SECURITY CHECKS (OWASP Top 10 + Node.js specifics):
+1. JWT Misconfigurations: algorithms array allowing 'none', missing algorithm restriction, weak secrets, missing expiration validation.
+2. Authentication Bypasses: Middleware that can be skipped, missing auth checks on sensitive routes, token validation gaps.
+3. NoSQL Injection: Unsanitized user input in MongoDB queries (req.body/params/query passed directly to $where, $regex, or query operators).
+4. Regex Denial of Service (ReDoS): new RegExp(userInput) without escaping enables catastrophic backtracking.
+5. Cookie Security: Missing httpOnly, secure, sameSite flags. Mismatched set/clear paths. Cookie not actually cleared on logout.
+6. Path Traversal: User-controlled file paths without sanitization (e.g. ../../../etc/passwd).
+7. Privilege Escalation: Users accessing resources they don't own, missing ownership checks in CRUD operations.
+8. Information Disclosure: Stack traces, internal paths, or database details leaked in error responses.
+9. SSRF: User-controlled URLs in server-side fetch/request calls.
+10. Mass Assignment: Accepting full req.body into database create/update without whitelisting fields.
+11. Timing Attacks: Using === to compare secrets/tokens instead of crypto.timingSafeEqual.
+12. Rate Limiting Gaps: Auth endpoints without rate limiting enabling brute force.
+
+For EACH security issue found:
+- "line": Line number where the vulnerability exists.
+- "severity": "security" (for actual vulnerabilities) | "bug" (for auth logic errors).
+- "message": Describe the vulnerability, attack vector, and potential impact.
+- "suggestedFix": A production-ready fix.
+
+Respond with a valid JSON array. If no security issues, respond with [].
+Do NOT include markdown fences or prose.`;
+
+    const trimmedPatch = patch.length > 20000 ? patch.slice(0, 20000) + '\n...[truncated]' : patch;
+    let userPrompt = `Security-sensitive file: ${filename}\n\n\`\`\`diff\n${trimmedPatch}\n\`\`\``;
+
+    if (contextFiles && contextFiles.length > 0) {
+      userPrompt += '\n\n## Related files for cross-reference:\n';
+      for (const ctx of contextFiles) {
+        const trimmed = ctx.snippet.length > 2000 ? ctx.snippet.slice(0, 2000) + '\n...[truncated]' : ctx.snippet;
+        userPrompt += `### ${ctx.filename}\n\`\`\`\n${trimmed}\n\`\`\`\n\n`;
+      }
+    }
+
+    let rawResponse = '';
+
+    for (const model of ACTIVE_GEMINI_MODELS) {
+      try {
+        console.log(`[Security] Scanning ${filename} using ${model}...`);
+
+        const apiCall = ai.models.generateContent({
+          model,
+          config: {
+            systemInstruction: SECURITY_PROMPT,
+            temperature: 0.05,
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
+          },
+          contents: userPrompt,
+        });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Security scan timeout for ${model}`)), 15000)
+        );
+
+        const response: any = await Promise.race([apiCall, timeoutPromise]);
+        rawResponse = response.text ?? '';
+
+        if (rawResponse) {
+          console.log(`[Security] Completed security scan of ${filename} using ${model}`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[Security] ${model} failed for ${filename}:`, ((err as Error).message || '').slice(0, 100));
+        await sleep(200);
+      }
+    }
+
+    if (!rawResponse) return [];
+
+    try {
+      const parsed = repairAndParseJsonArray(rawResponse) as GeminiComment[];
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .filter(
+          (c) =>
+            typeof c.line === 'number' &&
+            typeof c.message === 'string' &&
+            ['bug', 'security', 'smell', 'nit'].includes(c.severity)
+        )
+        .map((c) => ({
+          line: Math.max(1, Math.floor(c.line)),
+          severity: c.severity,
+          message: `[Security Scan] ${c.message}`,
+          suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
+        }));
+    } catch (err) {
+      console.error('[Security] Parse error:', rawResponse);
+      return [];
     }
   },
 };
