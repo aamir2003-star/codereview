@@ -24,7 +24,13 @@ export const repoController = {
       }
 
       const accessToken = await getUserAccessToken(req.user.userId);
-      const repos = await githubService.getUserRepos(accessToken);
+      let repos = await githubService.getUserRepos(accessToken);
+
+      const query = req.query.search as string;
+      if (query) {
+        const searchRegex = new RegExp(query, 'i');
+        repos = repos.filter((r) => searchRegex.test(r.name) || searchRegex.test(r.full_name));
+      }
 
       res.status(200).json({ repos });
     } catch (err) {

@@ -84,7 +84,7 @@ const ReviewSchema = new Schema<IReview>(
 );
 
 // Index for quick lookups per PR
-ReviewSchema.index({ owner: 1, repo: 1, pullNumber: 1 });
+ReviewSchema.index({ repo: 1, pullNumber: 1 }, { unique: true });
 ReviewSchema.index({ requestedBy: 1, createdAt: -1 });
 
 export const Review = mongoose.model<IReview>('Review', ReviewSchema);

@@ -280,6 +280,18 @@ export function DiffViewer({
     }
   }, [currentReview]);
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' && selectedFileIndex < files.length - 1) {
+        setSelectedFileIndex(selectedFileIndex + 1);
+      } else if (e.key === 'ArrowLeft' && selectedFileIndex > 0) {
+        setSelectedFileIndex(selectedFileIndex - 1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const { progress, isStreaming } = useReviewSocket({
     reviewId: reviewId ?? null,
     token,
