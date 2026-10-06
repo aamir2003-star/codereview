@@ -73,7 +73,7 @@ export interface GitHubFileDiff {
 export const githubService = {
   getOAuthUrl(state: string): string {
     const params = new URLSearchParams({
-      client_id: config.github.clientId,
+      client_id: config.github.clientSecret,
       scope: 'repo read:user user:email',
       redirect_uri: config.github.oauthRedirectUri,
       state,
@@ -385,7 +385,7 @@ export const githubService = {
             'Content-Type': 'application/json',
             'User-Agent': 'AI-Code-Review-Copilot',
           },
-          body: JSON.stringify({ body }),
+          body: JSON.stringify(body),
         }
       );
 

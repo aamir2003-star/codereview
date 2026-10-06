@@ -363,7 +363,7 @@ export const reviewController = {
    * GET /review/:id
    */
   async getReview(req: AuthenticatedRequest, res: Response): Promise<void> {
-    const reviewId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reviewId = Array.isArray(req.params.reviewId) ? req.params.reviewId[0] : req.params.reviewId;
 
     if (!reviewId || !mongoose.isValidObjectId(reviewId)) {
       res.status(400).json({ error: 'Valid review ID is required' });
@@ -476,10 +476,10 @@ export const reviewController = {
       }
 
       const userObjId = new mongoose.Types.ObjectId(userId);
-      const hasUpvoted = comment.upvotes.some((id) => id.toString() === userId);
+      const hasUpvoted = comment.upvotes.includes(userObjId);
 
       if (hasUpvoted) {
-        comment.upvotes = comment.upvotes.filter((id) => id.toString() !== userId);
+        comment.upvotes = comment.upvotes.filter((id) => id !== userObjId);
       } else {
         comment.upvotes.push(userObjId);
       }
