@@ -271,6 +271,44 @@ export const githubService = {
     }
   },
 
+  /**
+   * Fetch the raw content of a single file from the repo.
+   * Uses the GitHub Contents API. Returns the decoded text content.
+   */
+  async getFileContent(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    path: string,
+    ref?: string
+  ): Promise<string | null> {
+    try {
+      const refParam = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${path}${refParam}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'AI-Code-Review-Copilot',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = (await response.json()) as { content?: string; encoding?: string };
+      if (data.content && data.encoding === 'base64') {
+        return Buffer.from(data.content, 'base64').toString('utf-8');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
   async createPullRequestReview(
     accessToken: string,
     owner: string,

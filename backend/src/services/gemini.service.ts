@@ -385,7 +385,8 @@ ${fileSummary}`;
    * that no single-file review can detect.
    */
   async crossFileIntegrationReview(
-    files: Array<{ filename: string; patch: string }>
+    files: Array<{ filename: string; patch: string }>,
+    repoContextFiles?: Array<{ filename: string; snippet: string }>
   ): Promise<GeminiComment[]> {
     if (!config.geminiApiKey) {
       throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
@@ -396,11 +397,11 @@ ${fileSummary}`;
 
     const CROSS_FILE_PROMPT = `You are a Principal Integration Architect performing a CROSS-FILE consistency review.
 
-You are given ALL files changed in a Pull Request. Your job is to find bugs that ONLY appear when comparing files against each other — issues that are INVISIBLE when reviewing any single file in isolation.
+You are given ALL files changed in a Pull Request, PLUS key reference files from the repository (route definitions, model schemas, middleware). Your job is to find bugs that ONLY appear when comparing files against each other — issues that are INVISIBLE when reviewing any single file in isolation.
 
 CROSS-FILE CHECKS:
-1. HTTP Method Mismatches: Frontend API calls use one HTTP method (e.g. POST) but the backend route expects a different one (e.g. PATCH). This causes 404/405 errors at runtime.
-2. Type Mismatches Across Boundaries: A controller passes a string where a Mongoose model schema expects ObjectId, or vice versa. The query silently returns null/empty.
+1. HTTP Method Mismatches: Frontend API calls use one HTTP method (e.g. POST) but the backend route expects a different one (e.g. PATCH). Compare the fetch/axios calls in frontend files against the Express router method (router.get, router.post, router.patch, etc.) in the route definition files. This causes 404/405 errors at runtime.
+2. Type Mismatches Across Boundaries: A controller passes a string where a Mongoose model schema expects ObjectId, or vice versa. Compare the controller's query filter fields against the model schema field types. The query silently returns null/empty.
 3. Route Path Mismatches: Frontend calls /api/foo but backend registers /api/bar.
 4. Schema Changes Breaking Queries: A model index or field was changed, but existing queries in controllers still use the old field names or assumptions.
 5. Cookie/Session Path Inconsistencies: setCookie in one file uses path '/a/b' but clearCookie in another file uses path '/a'.
@@ -420,13 +421,24 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     // Build combined diff context (limit total size to avoid timeouts)
     let combinedDiffs = '';
     let totalChars = 0;
-    const MAX_TOTAL_CHARS = 40000;
+    const MAX_TOTAL_CHARS = 50000;
 
     for (const file of files) {
       const snippet = file.patch.length > 4000 ? file.patch.slice(0, 4000) + '\n...[truncated]' : file.patch;
       if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
-      combinedDiffs += `\n### File: ${file.filename}\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
+      combinedDiffs += `\n### Changed File: ${file.filename}\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
       totalChars += snippet.length;
+    }
+
+    // Include repo reference files (routes, models, schemas)
+    if (repoContextFiles && repoContextFiles.length > 0) {
+      combinedDiffs += '\n\n## Reference Files from Repository (NOT changed in PR, for cross-reference):\n';
+      for (const ctx of repoContextFiles) {
+        const snippet = ctx.snippet.length > 2500 ? ctx.snippet.slice(0, 2500) + '\n...[truncated]' : ctx.snippet;
+        if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
+        combinedDiffs += `\n### Reference: ${ctx.filename}\n\`\`\`\n${snippet}\n\`\`\`\n`;
+        totalChars += snippet.length;
+      }
     }
 
     const userPrompt = `All changed files in this PR:\n${combinedDiffs}`;

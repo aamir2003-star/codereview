@@ -51,51 +51,77 @@ function isReviewableFile(filename: string): boolean {
   return true;
 }
 
-// Phase 2: Cross-file context mapping
-// Maps file patterns to related files that should be included as context
+// Phase 2: Cross-file context mapping (UPGRADED)
+// Two types of context:
+// 1. Dynamic: Related files from the PR diff (other changed files)
+// 2. Static: Actual repo files fetched via GitHub API (routes, models, schemas)
+//    These are ALWAYS fetched even if not changed in the PR.
 const CONTEXT_RULES: Array<{
   pattern: RegExp;
-  relatedPatterns: RegExp[];
+  dynamicPatterns: RegExp[];
+  staticPaths: string[];
   description: string;
 }> = [
   {
     pattern: /frontend\/lib\/(api|review-api|repo-api)\.ts/,
-    relatedPatterns: [/backend\/src\/routes\//],
-    description: 'Frontend API calls need backend route definitions for method/path verification',
+    dynamicPatterns: [/backend\/src\/routes\//],
+    staticPaths: [
+      'backend/src/routes/review.routes.ts',
+      'backend/src/routes/comment.routes.ts',
+      'backend/src/routes/repo.routes.ts',
+      'backend/src/routes/auth.routes.ts',
+    ],
+    description: 'Frontend API calls need backend route definitions for HTTP method/path verification',
   },
   {
     pattern: /backend\/src\/controllers\//,
-    relatedPatterns: [/backend\/src\/models\//, /backend\/src\/middleware\//],
-    description: 'Controllers need model schemas for type verification',
+    dynamicPatterns: [/backend\/src\/models\//],
+    staticPaths: [
+      'backend/src/models/Review.ts',
+      'backend/src/models/Comment.ts',
+      'backend/src/models/User.ts',
+      'backend/src/middleware/auth.middleware.ts',
+    ],
+    description: 'Controllers need model schemas for type/field verification and middleware for userId type',
   },
   {
     pattern: /backend\/src\/middleware\//,
-    relatedPatterns: [/backend\/src\/controllers\//, /backend\/src\/config\//],
-    description: 'Middleware needs controller and config context',
+    dynamicPatterns: [/backend\/src\/controllers\//],
+    staticPaths: [
+      'backend/src/config/env.ts',
+    ],
+    description: 'Middleware needs config context',
   },
   {
     pattern: /backend\/src\/services\//,
-    relatedPatterns: [/backend\/src\/models\//, /backend\/src\/controllers\//],
-    description: 'Services need model schemas and consumer controllers',
+    dynamicPatterns: [/backend\/src\/models\//],
+    staticPaths: [
+      'backend/src/models/Review.ts',
+      'backend/src/models/Comment.ts',
+    ],
+    description: 'Services need model schemas',
   },
   {
     pattern: /frontend\/hooks\//,
-    relatedPatterns: [/frontend\/components\//, /frontend\/lib\//],
+    dynamicPatterns: [/frontend\/components\//, /frontend\/lib\//],
+    staticPaths: [],
     description: 'Hooks need component and library context',
   },
   {
     pattern: /frontend\/components\//,
-    relatedPatterns: [/frontend\/hooks\//, /frontend\/lib\//],
+    dynamicPatterns: [/frontend\/hooks\//, /frontend\/lib\//],
+    staticPaths: [],
     description: 'Components need hooks and API context',
   },
   {
     pattern: /backend\/src\/models\//,
-    relatedPatterns: [/backend\/src\/controllers\//],
+    dynamicPatterns: [/backend\/src\/controllers\//],
+    staticPaths: [],
     description: 'Models need controller context to verify query consistency',
   },
 ];
 
-function getRelatedFiles(
+function getRelatedFilesFromDiff(
   filename: string,
   allFiles: Array<{ filename: string; patch?: string }>
 ): Array<{ filename: string; snippet: string }> {
@@ -103,9 +129,9 @@ function getRelatedFiles(
 
   for (const rule of CONTEXT_RULES) {
     if (rule.pattern.test(filename)) {
-      for (const relatedPattern of rule.relatedPatterns) {
+      for (const dynamicPattern of rule.dynamicPatterns) {
         for (const file of allFiles) {
-          if (relatedPattern.test(file.filename) && file.filename !== filename && file.patch) {
+          if (dynamicPattern.test(file.filename) && file.filename !== filename && file.patch) {
             related.push({ filename: file.filename, snippet: file.patch });
           }
         }
@@ -114,6 +140,49 @@ function getRelatedFiles(
   }
 
   return related;
+}
+
+function getStaticContextPaths(filename: string): string[] {
+  const paths: string[] = [];
+
+  for (const rule of CONTEXT_RULES) {
+    if (rule.pattern.test(filename)) {
+      paths.push(...rule.staticPaths);
+    }
+  }
+
+  // Deduplicate
+  return [...new Set(paths)];
+}
+
+async function fetchStaticContextFiles(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  filename: string,
+  prRef?: string
+): Promise<Array<{ filename: string; snippet: string }>> {
+  const staticPaths = getStaticContextPaths(filename);
+  if (staticPaths.length === 0) return [];
+
+  const results: Array<{ filename: string; snippet: string }> = [];
+
+  await Promise.all(
+    staticPaths.map(async (path) => {
+      try {
+        const content = await githubService.getFileContent(accessToken, owner, repo, path, prRef);
+        if (content) {
+          // Truncate to keep token count manageable
+          const trimmed = content.length > 3000 ? content.slice(0, 3000) + '\n... [truncated]' : content;
+          results.push({ filename: path, snippet: trimmed });
+        }
+      } catch {
+        // Silently skip files that don't exist
+      }
+    })
+  );
+
+  return results;
 }
 
 // Phase 4: Security-sensitive file patterns
@@ -240,6 +309,57 @@ export const reviewController = {
         let filesReviewedCount = 0;
         const CONCURRENCY_LIMIT = 3;
 
+        // Phase 2 (upgraded): Pre-fetch static context files from the repo
+        // These are actual source files (routes, models, schemas) fetched via GitHub API,
+        // NOT from the PR diff. This lets the AI cross-reference even unchanged files.
+        const staticContextCache = new Map<string, Array<{ filename: string; snippet: string }>>();
+        try {
+          const allStaticPaths = new Set<string>();
+          for (const file of filesToReview) {
+            for (const path of getStaticContextPaths(file.filename)) {
+              allStaticPaths.add(path);
+            }
+          }
+
+          if (allStaticPaths.size > 0) {
+            console.log(`[Review] Pre-fetching ${allStaticPaths.size} static context files from repo...`);
+            const fetchedFiles = new Map<string, string>();
+
+            await Promise.all(
+              [...allStaticPaths].map(async (path) => {
+                try {
+                  const content = await githubService.getFileContent(accessToken, owner, repo, path);
+                  if (content) {
+                    const trimmed = content.length > 3000 ? content.slice(0, 3000) + '\n... [truncated]' : content;
+                    fetchedFiles.set(path, trimmed);
+                  }
+                } catch {
+                  // Skip files that don't exist
+                }
+              })
+            );
+
+            // Build per-file context cache
+            for (const file of filesToReview) {
+              const staticPaths = getStaticContextPaths(file.filename);
+              const contextForFile: Array<{ filename: string; snippet: string }> = [];
+              for (const path of staticPaths) {
+                const content = fetchedFiles.get(path);
+                if (content) {
+                  contextForFile.push({ filename: path, snippet: content });
+                }
+              }
+              if (contextForFile.length > 0) {
+                staticContextCache.set(file.filename, contextForFile);
+              }
+            }
+
+            console.log(`[Review] Static context ready for ${staticContextCache.size} file(s).`);
+          }
+        } catch (ctxErr) {
+          console.warn('[Review] Failed to pre-fetch static context (non-fatal):', ctxErr);
+        }
+
         // Process files concurrently with bounded worker pool (3-4x faster than sequential)
         let fileIndex = 0;
         const workers: Promise<void>[] = [];
@@ -277,10 +397,20 @@ export const reviewController = {
                 try {
                   console.log(`[Review] Analyzing file [${i + 1}/${filesToReview.length}]: ${file.filename} (${file.patch.length} chars)`);
 
-                  // Phase 2: Gather cross-file context for this file
-                  const contextFiles = getRelatedFiles(file.filename, filesToReview);
+                  // Phase 2 (upgraded): Combine dynamic (PR diff) + static (repo files) context
+                  const dynamicContext = getRelatedFilesFromDiff(file.filename, filesToReview);
+                  const staticContext = staticContextCache.get(file.filename) || [];
+                  // Merge and deduplicate by filename
+                  const seenFiles = new Set<string>();
+                  const contextFiles: Array<{ filename: string; snippet: string }> = [];
+                  for (const ctx of [...staticContext, ...dynamicContext]) {
+                    if (!seenFiles.has(ctx.filename)) {
+                      seenFiles.add(ctx.filename);
+                      contextFiles.push(ctx);
+                    }
+                  }
                   if (contextFiles.length > 0) {
-                    console.log(`[Review] Injecting ${contextFiles.length} context file(s) for ${file.filename}`);
+                    console.log(`[Review] Injecting ${contextFiles.length} context file(s) for ${file.filename} (${staticContext.length} from repo, ${dynamicContext.length} from PR)`);
                   }
 
                   const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
@@ -395,10 +525,23 @@ export const reviewController = {
 
             console.log(`[Review] Starting cross-file integration review for ${filesToReview.length} files...`);
 
+            // Collect all unique static context files for the cross-file review
+            const allStaticContext: Array<{ filename: string; snippet: string }> = [];
+            const seenStaticFiles = new Set<string>();
+            for (const [, ctxFiles] of staticContextCache) {
+              for (const ctx of ctxFiles) {
+                if (!seenStaticFiles.has(ctx.filename)) {
+                  seenStaticFiles.add(ctx.filename);
+                  allStaticContext.push(ctx);
+                }
+              }
+            }
+
             const crossFileComments = await geminiService.crossFileIntegrationReview(
               filesToReview
                 .filter((f) => f.patch)
-                .map((f) => ({ filename: f.filename, patch: f.patch! }))
+                .map((f) => ({ filename: f.filename, patch: f.patch! })),
+              allStaticContext.length > 0 ? allStaticContext : undefined
             );
 
             if (crossFileComments.length > 0) {
