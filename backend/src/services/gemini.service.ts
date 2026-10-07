@@ -97,12 +97,8 @@ function repairAndParseJsonArray(raw: string): any[] {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const ACTIVE_GEMINI_MODELS = [
-  'gemini-3.5-flash-lite',
   'gemini-3.5-flash',
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-3-flash-preview',
-  'gemini-flash-latest',
+  'gemini-3.5-flash-lite'
 ];
 
 export const geminiService = {
@@ -139,7 +135,9 @@ export const geminiService = {
       userPrompt +=
         'Verify that HTTP methods, type signatures, route paths, schema field types, ' +
         'cookie paths, and event listener patterns in the reviewed file are CONSISTENT ' +
-        'with these context files.\n\n';
+        'with these context files.\n' +
+        '- CHECK: Does the frontend fetch() use POST but the backend route uses PATCH (or vice versa)?\n' +
+        '- CHECK: Does the controller pass a string to a query where the Mongoose schema expects an ObjectId?\n\n';
       for (const ctx of contextFiles) {
         const trimmedSnippet =
           ctx.snippet.length > 3000
@@ -152,8 +150,8 @@ export const geminiService = {
     let rawResponse = '';
     let lastError: unknown = null;
 
-    // Retry loop with exponential backoff for transient 503 high demand / 429 rate limit spikes
-    const maxRounds = 2;
+    // Retry loop with max 1 round and short timeouts to fail fast within ~30s
+    const maxRounds = 1;
     outerLoop: for (let round = 0; round < maxRounds; round++) {
       for (const model of ACTIVE_GEMINI_MODELS) {
         try {
@@ -162,7 +160,13 @@ export const geminiService = {
           const apiCall = ai.models.generateContent({
             model,
             config: {
-              systemInstruction: SYSTEM_PROMPT,
+              systemInstruction: SYSTEM_PROMPT + `
+EXTREMELY IMPORTANT ADDITIONAL CHECKS:
+- POST vs PATCH Mismatch: If this is a frontend file doing fetch('/api/foo', { method: 'POST' }), but the related backend route uses router.patch('/foo'), flag it as a BUG!
+- String vs ObjectId: If this is a Mongoose query like Model.findOne({ _id, requestedBy: userId }) and userId is a String, it will fail if the schema defines requestedBy as ObjectId. You MUST use new mongoose.Types.ObjectId(userId).
+- ReDoS: new RegExp(query, 'i') WITHOUT escaping special characters is a security vulnerability (ReDoS).
+- Increment Side-Effects: filesReviewedCount++ in a math calculation or assignment evaluates to the old value, not the incremented value. Use ++filesReviewedCount or do it on a separate line.
+`,
               temperature: 0.1,
               maxOutputTokens: 8192,
               responseMimeType: 'application/json',
@@ -171,7 +175,7 @@ export const geminiService = {
           });
 
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout after 14s for model ${model}`)), 14000)
+            setTimeout(() => reject(new Error(`Timeout after 12s for model ${model}`)), 12000)
           );
 
           const response: any = await Promise.race([apiCall, timeoutPromise]);
@@ -185,22 +189,14 @@ export const geminiService = {
           lastError = err;
           const msg = (err as Error).message || '';
           console.warn(`[Gemini] ${model} attempt failed for ${filename}:`, msg.slice(0, 120));
-          await sleep(200);
+          await sleep(100);
         }
-      }
-
-      if (round < maxRounds - 1) {
-        const backoffMs = 1000 * Math.pow(2, round);
-        console.log(`[Gemini] Retrying review for ${filename} in ${backoffMs}ms...`);
-        await sleep(backoffMs);
       }
     }
 
     if (!rawResponse) {
-      if (lastError) {
-        throw new GeminiApiError(`Gemini API call failed: ${(lastError as Error).message}`);
-      }
-      return [];
+      // Return exact error message requested by user if we timeout/fail
+      throw new GeminiApiError('due to high traffic we cannot review your code please try again later');
     }
 
     try {
@@ -465,7 +461,8 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     let rawResponse = '';
     let lastError: unknown = null;
 
-    for (let round = 0; round < 2; round++) {
+    const maxRounds = 1;
+    outerLoop: for (let round = 0; round < maxRounds; round++) {
       for (const model of ACTIVE_GEMINI_MODELS) {
         try {
           console.log(`[Gemini] [Cross-File Pass] Analyzing ${files.length} files together using ${model}...`);
@@ -473,7 +470,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
           const apiCall = ai.models.generateContent({
             model,
             config: {
-              systemInstruction: CROSS_FILE_PROMPT,
+              systemInstruction: CROSS_FILE_PROMPT + `\n\nCRITICAL CHECK: Look for POST/PATCH mismatches between fetch calls and router definitions. Look for String vs ObjectId mismatches in Mongoose queries!`,
               temperature: 0.1,
               maxOutputTokens: 8192,
               responseMimeType: 'application/json',
@@ -482,7 +479,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
           });
 
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout after 20s for cross-file model ${model}`)), 20000)
+            setTimeout(() => reject(new Error(`Timeout after 15s for cross-file model ${model}`)), 15000)
           );
 
           const response: any = await Promise.race([apiCall, timeoutPromise]);
@@ -490,22 +487,19 @@ Do NOT include markdown fences or prose outside the JSON array.`;
 
           if (rawResponse) {
             console.log(`[Gemini] Cross-file review completed using ${model}`);
-            break;
+            break outerLoop;
           }
         } catch (err) {
           lastError = err;
           const msg = (err as Error).message || '';
           console.warn(`[Gemini] Cross-file ${model} failed:`, msg.slice(0, 120));
-          await sleep(300);
+          await sleep(100);
         }
       }
-      if (rawResponse) break;
-      await sleep(1500);
     }
 
     if (!rawResponse) {
-      console.warn('[Gemini] Cross-file integration review failed, skipping.');
-      return [];
+      throw new GeminiApiError('due to high traffic we cannot review your code please try again later');
     }
 
     try {
@@ -594,40 +588,47 @@ Do NOT include markdown fences or prose.`;
     }
 
     let rawResponse = '';
+    let lastError: unknown = null;
 
-    for (const model of ACTIVE_GEMINI_MODELS) {
-      try {
-        console.log(`[Security] Scanning ${filename} using ${model}...`);
+    const maxRounds = 1;
+    outerLoop: for (let round = 0; round < maxRounds; round++) {
+      for (const model of ACTIVE_GEMINI_MODELS) {
+        try {
+          console.log(`[Security] Scanning ${filename} using ${model}...`);
 
-        const apiCall = ai.models.generateContent({
-          model,
-          config: {
-            systemInstruction: SECURITY_PROMPT,
-            temperature: 0.05,
-            maxOutputTokens: 4096,
-            responseMimeType: 'application/json',
-          },
-          contents: userPrompt,
-        });
+          const apiCall = ai.models.generateContent({
+            model,
+            config: {
+              systemInstruction: SECURITY_PROMPT + `\n\nCRITICAL CHECK: Look for new RegExp(..., 'i') without escaping the variable. This causes ReDoS. Flag it immediately as a vulnerability!`,
+              temperature: 0.05,
+              maxOutputTokens: 4096,
+              responseMimeType: 'application/json',
+            },
+            contents: userPrompt,
+          });
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Security scan timeout for ${model}`)), 15000)
-        );
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Security scan timeout for ${model}`)), 12000)
+          );
 
-        const response: any = await Promise.race([apiCall, timeoutPromise]);
-        rawResponse = response.text ?? '';
+          const response: any = await Promise.race([apiCall, timeoutPromise]);
+          rawResponse = response.text ?? '';
 
-        if (rawResponse) {
-          console.log(`[Security] Completed security scan of ${filename} using ${model}`);
-          break;
+          if (rawResponse) {
+            console.log(`[Security] Completed security scan of ${filename} using ${model}`);
+            break outerLoop;
+          }
+        } catch (err) {
+          lastError = err;
+          console.warn(`[Security] ${model} failed for ${filename}:`, ((err as Error).message || '').slice(0, 100));
+          await sleep(100);
         }
-      } catch (err) {
-        console.warn(`[Security] ${model} failed for ${filename}:`, ((err as Error).message || '').slice(0, 100));
-        await sleep(200);
       }
     }
 
-    if (!rawResponse) return [];
+    if (!rawResponse) {
+      throw new GeminiApiError('due to high traffic we cannot review your code please try again later');
+    }
 
     try {
       const parsed = repairAndParseJsonArray(rawResponse) as GeminiComment[];

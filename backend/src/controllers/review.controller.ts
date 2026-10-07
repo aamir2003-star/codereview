@@ -493,6 +493,7 @@ export const reviewController = {
                     errMsg.includes('429') ||
                     errMsg.includes('503') ||
                     errMsg.includes('high demand') ||
+                    errMsg.includes('high traffic') ||
                     errMsg.includes('UNAVAILABLE') ||
                     errMsg.includes('RESOURCE_EXHAUSTED') ||
                     errMsg.includes('quota');
@@ -635,12 +636,13 @@ export const reviewController = {
           errMsg.includes('429') ||
           errMsg.includes('503') ||
           errMsg.includes('high demand') ||
+          errMsg.includes('high traffic') ||
           errMsg.includes('UNAVAILABLE') ||
           errMsg.includes('RESOURCE_EXHAUSTED') ||
           errMsg.includes('quota');
 
         const userMessage = isHighDemand
-          ? 'Due to heavy traffic on the AI review engine, we cannot review your code at this time. Please try again in a few moments.'
+          ? 'due to high traffic we cannot review your code please try again later'
           : errMsg || 'Review process encountered an unexpected issue.';
 
         await Review.findByIdAndUpdate(review._id, {
