@@ -222,21 +222,15 @@ export const reviewController = {
       return;
     }
 
-    // Smart Cache: Check if a review already exists for this PR
+    // Check if a review already exists for this PR
     let review = await Review.findOne({ owner, repo, pullNumber });
-    let existingCommentsList: Array<{ filePath: string; line: number; message: string }> = [];
 
     if (review) {
-      // Re-run requested: fetch existing comments to skip them
-      console.log(`[Review] Re-running review for ${owner}/${repo} #${pullNumber}. Fetching existing comments to prevent duplicates.`);
-      const existingDocs = await Comment.find({ reviewId: review._id });
-      existingCommentsList = existingDocs.map(c => ({
-        filePath: c.filePath,
-        line: c.lineNumber,
-        message: c.message
-      }));
-      // Reset status to pending
+      // Re-run requested: clear old comments so a fresh comprehensive review runs
+      console.log(`[Review] Re-running review for ${owner}/${repo} #${pullNumber}. Clearing old comments for fresh analysis.`);
+      await Comment.deleteMany({ reviewId: review._id });
       review.status = 'pending';
+      review.totalComments = 0;
       await review.save();
     } else {
       // First time reviewing this PR
@@ -440,19 +434,17 @@ export const reviewController = {
                     console.log(`[Review] Injecting ${contextFiles.length} context file(s) for ${file.filename} (${staticContext.length} from repo, ${dynamicContext.length} from PR)`);
                   }
 
-                  const existingForFile = existingCommentsList.filter(c => c.filePath === file.filename);
-
-                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles, existingForFile);
+                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
 
                   // Phase 4: Run dedicated security scanner on sensitive files
                   if (isSecuritySensitive(file.filename)) {
                     console.log(`[Security] Running security scan on ${file.filename}...`);
                     try {
-                      const secComments = await geminiService.securityScanFile(file.filename, file.patch, contextFiles, existingForFile);
-                      // Deduplicate: only add security comments that don't overlap with existing
+                      const secComments = await geminiService.securityScanFile(file.filename, file.patch, contextFiles);
+                      // Deduplicate: only skip security comments that are identical to an existing comment
                       for (const sc of secComments) {
                         const isDuplicate = comments.some(
-                          (c) => Math.abs(c.line - sc.line) <= 2 && c.severity === sc.severity
+                          (c) => c.line === sc.line && c.message.trim().toLowerCase() === sc.message.trim().toLowerCase()
                         );
                         if (!isDuplicate) {
                           comments.push(sc);
@@ -465,15 +457,17 @@ export const reviewController = {
                   }
 
                   if (comments.length > 0) {
-                    // Deduplicate comments that report the same issue
-                    const uniqueComments = comments.filter((comment, idx, arr) => {
-                      return !arr.slice(0, idx).some(prev =>
-                        Math.abs(prev.line - comment.line) <= 3 &&
-                        (prev.message.includes(comment.message.slice(0, 50)) ||
-                         comment.message.includes(prev.message.slice(0, 50)) ||
-                         prev.severity === comment.severity && Math.abs(prev.line - comment.line) <= 1)
+                    // Deduplicate comments: only remove identical duplicates on the exact same line
+                    const uniqueComments: typeof comments = [];
+                    for (const c of comments) {
+                      const isDup = uniqueComments.some(
+                        (existing) =>
+                          existing.line === c.line &&
+                          (existing.message.trim().toLowerCase() === c.message.trim().toLowerCase() ||
+                           Boolean(existing.suggestedFix && existing.suggestedFix === c.suggestedFix))
                       );
-                    });
+                      if (!isDup) uniqueComments.push(c);
+                    }
 
                     const docs = await Comment.insertMany(
                       uniqueComments.map((c) => ({
@@ -487,7 +481,7 @@ export const reviewController = {
                     );
 
                     totalComments += docs.length;
-                    console.log(`[Review] Found ${docs.length} issues in ${file.filename} (${comments.length - uniqueComments.length} duplicates removed)`);
+                    console.log(`[Review] Found ${docs.length} issues in ${file.filename}`);
 
                     for (const doc of docs) {
                       io?.to(`review:${reviewId}`).emit('comment:new', {
@@ -581,24 +575,20 @@ export const reviewController = {
               filesToReview
                 .filter((f) => f.patch)
                 .map((f) => ({ filename: f.filename, patch: f.patch! })),
-              allStaticContext.length > 0 ? allStaticContext : undefined,
-              existingCommentsList.filter(c => c.filePath === 'cross-file')
+              allStaticContext.length > 0 ? allStaticContext : undefined
             );
 
             if (crossFileComments.length > 0) {
-              // Deduplicate cross-file comments against per-file comments already saved
+              // Deduplicate cross-file comments: only skip if identical message was already saved
               const allSavedComments = await Comment.find({ reviewId: review._id });
               const uniqueCrossComments = crossFileComments.filter((cc) => {
                 return !allSavedComments.some((saved) =>
-                  Math.abs(saved.lineNumber - cc.line) <= 3 &&
-                  (saved.message.includes(cc.message.slice(0, 50)) ||
-                   cc.message.includes(saved.message.slice(0, 50)))
+                  saved.lineNumber === cc.line &&
+                  saved.message.trim().toLowerCase() === cc.message.trim().toLowerCase()
                 );
               });
 
-              if (uniqueCrossComments.length === 0) {
-                console.log(`[Review] Cross-file review found ${crossFileComments.length} issues, all duplicates of per-file findings.`);
-              } else {
+              if (uniqueCrossComments.length > 0) {
                 const crossDocs = await Comment.insertMany(
                   uniqueCrossComments.map((c) => ({
                     reviewId: review._id,
@@ -610,15 +600,17 @@ export const reviewController = {
                   }))
                 );
 
-              totalComments += crossDocs.length;
-              console.log(`[Review] Cross-file review found ${crossDocs.length} integration issues (${crossFileComments.length - uniqueCrossComments.length} duplicates removed).`);
+                totalComments += crossDocs.length;
+                console.log(`[Review] Cross-file review found ${crossDocs.length} integration issues.`);
 
-              for (const doc of crossDocs) {
-                io?.to(`review:${reviewId}`).emit('comment:new', {
-                  reviewId,
-                  comment: doc.toObject(),
-                });
-              }
+                for (const doc of crossDocs) {
+                  io?.to(`review:${reviewId}`).emit('comment:new', {
+                    reviewId,
+                    comment: doc.toObject(),
+                  });
+                }
+              } else {
+                console.log(`[Review] Cross-file review found ${crossFileComments.length} issues, all duplicate of per-file findings.`);
               }
             } else {
               console.log('[Review] Cross-file review found no integration issues.');

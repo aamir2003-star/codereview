@@ -100,16 +100,19 @@ function repairAndParseJsonArray(raw: string): any[] {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const ACTIVE_GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-flash-latest',
+  'gemini-3.5-flash-lite',
   'gemini-3.5-flash',
-  'gemini-3.5-flash-lite'
 ];
 
 export const geminiService = {
   async reviewFileDiff(
     filename: string,
     patch: string,
-    contextFiles?: Array<{ filename: string; snippet: string }>,
-    existingComments?: Array<{ line: number; message: string }>
+    contextFiles?: Array<{ filename: string; snippet: string }>
   ): Promise<GeminiComment[]> {
     if (!config.geminiApiKey) {
       throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
@@ -123,14 +126,6 @@ export const geminiService = {
       patch.length > 25000 ? patch.slice(0, 25000) + '\n... [diff truncated]' : patch;
 
     let userPrompt = `File: ${filename}\n\nUnified diff:\n\`\`\`\n${trimmedPatch}\n\`\`\``;
-
-    if (existingComments && existingComments.length > 0) {
-      userPrompt += '\n\n## EXISTING BUGS (DO NOT REPORT THESE AGAIN)\n';
-      userPrompt += 'The following issues have ALREADY been found in previous review passes. Your task is to find entirely NEW bugs that were missed.\n';
-      for (const comment of existingComments) {
-        userPrompt += `- Line ${comment.line}: ${comment.message}\n`;
-      }
-    }
 
     // Phase 2: Inject cross-file context so AI can cross-reference related files
     if (contextFiles && contextFiles.length > 0) {
@@ -394,8 +389,7 @@ ${fileSummary}`;
    */
   async crossFileIntegrationReview(
     files: Array<{ filename: string; patch: string }>,
-    repoContextFiles?: Array<{ filename: string; snippet: string }>,
-    existingComments?: Array<{ line: number; message: string }>
+    repoContextFiles?: Array<{ filename: string; snippet: string }>
   ): Promise<GeminiComment[]> {
     if (!config.geminiApiKey) {
       throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
@@ -431,15 +425,6 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     let combinedDiffs = '';
     let totalChars = 0;
     const MAX_TOTAL_CHARS = 50000;
-
-    if (existingComments && existingComments.length > 0) {
-      combinedDiffs += '## EXISTING CROSS-FILE BUGS (DO NOT REPORT THESE AGAIN)\n';
-      combinedDiffs += 'The following integration issues have ALREADY been found in previous review passes. Your task is to find entirely NEW bugs that were missed.\n';
-      for (const comment of existingComments) {
-        combinedDiffs += `- Line ${comment.line}: ${comment.message}\n`;
-      }
-      combinedDiffs += '\n\n';
-    }
 
     for (const file of files) {
       const snippet = file.patch.length > 4000 ? file.patch.slice(0, 4000) + '\n...[truncated]' : file.patch;
@@ -535,8 +520,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
   async securityScanFile(
     filename: string,
     patch: string,
-    contextFiles?: Array<{ filename: string; snippet: string }>,
-    existingComments?: Array<{ line: number; message: string }>
+    contextFiles?: Array<{ filename: string; snippet: string }>
   ): Promise<GeminiComment[]> {
     if (!config.geminiApiKey) {
       throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
@@ -573,14 +557,6 @@ Do NOT include markdown fences or prose.`;
 
     const trimmedPatch = patch.length > 20000 ? patch.slice(0, 20000) + '\n...[truncated]' : patch;
     let userPrompt = `Security-sensitive file: ${filename}\n\n\`\`\`diff\n${trimmedPatch}\n\`\`\``;
-
-    if (existingComments && existingComments.length > 0) {
-      userPrompt += '\n\n## EXISTING BUGS (DO NOT REPORT THESE AGAIN)\n';
-      userPrompt += 'The following issues have ALREADY been found in previous review passes. Your task is to find entirely NEW security vulnerabilities that were missed.\n';
-      for (const comment of existingComments) {
-        userPrompt += `- Line ${comment.line}: ${comment.message}\n`;
-      }
-    }
 
     if (contextFiles && contextFiles.length > 0) {
       userPrompt += '\n\n## Related files for cross-reference:\n';
