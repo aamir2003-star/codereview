@@ -266,7 +266,7 @@ export const reviewController = {
 
         // Filter out non-reviewable assets / lockfiles
         const reviewableFiles = files.filter((f) => isReviewableFile(f.filename) && f.patch);
-        const filesToReview = reviewableFiles.length > 0 ? reviewableFiles.slice(0, 10) : files.slice(0, 10);
+        const filesToReview = reviewableFiles.length > 0 ? reviewableFiles : files.filter((f) => f.patch);
 
         await Review.findByIdAndUpdate(review._id, { totalFiles: filesToReview.length });
 
@@ -493,24 +493,17 @@ export const reviewController = {
                 } catch (err) {
                   console.error(`[Review] Error analyzing ${file.filename}:`, err instanceof Error ? err.message : err);
                   const errMsg = err instanceof Error ? err.message : String(err);
-                  const isHighDemand =
-                    errMsg.includes('429') ||
-                    errMsg.includes('503') ||
-                    errMsg.includes('high demand') ||
-                    errMsg.includes('high traffic') ||
-                    errMsg.includes('UNAVAILABLE') ||
-                    errMsg.includes('RESOURCE_EXHAUSTED') ||
-                    errMsg.includes('quota');
-
-                  if (isHighDemand) {
-                    throw err;
-                  }
 
                   io?.to(`review:${reviewId}`).emit('file:error', {
                     reviewId,
                     filename: file.filename,
                     error: errMsg || 'Analysis failed',
                   });
+
+                  // Add a small pause if rate-limited so subsequent files succeed
+                  if (errMsg.includes('429') || errMsg.includes('traffic') || errMsg.includes('quota')) {
+                    await new Promise((r) => setTimeout(r, 1500));
+                  }
                 }
 
                 filesReviewedCount++;

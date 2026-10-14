@@ -424,7 +424,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     // Build combined diff context (limit total size to avoid timeouts)
     let combinedDiffs = '';
     let totalChars = 0;
-    const MAX_TOTAL_CHARS = 50000;
+    const MAX_TOTAL_CHARS = 120000;
 
     for (const file of files) {
       const snippet = file.patch.length > 4000 ? file.patch.slice(0, 4000) + '\n...[truncated]' : file.patch;
