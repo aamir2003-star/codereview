@@ -191,22 +191,37 @@ export const githubService = {
     pullNumber: number
   ): Promise<GitHubFileDiff[]> {
     try {
-      const response = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files?per_page=100`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/vnd.github.v3+json',
-            'User-Agent': 'AI-Code-Review-Copilot',
-          },
-        }
-      );
+      const allFiles: GitHubFileDiff[] = [];
+      let page = 1;
+      const perPage = 100;
+      const maxPages = 4;
 
-      if (!response.ok) {
-        throw new GitHubApiError(`Failed to fetch PR files: ${response.statusText}`, response.status);
+      while (page <= maxPages) {
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/files?per_page=${perPage}&page=${page}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/vnd.github.v3+json',
+              'User-Agent': 'AI-Code-Review-Copilot',
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new GitHubApiError(`Failed to fetch PR files: ${response.statusText}`, response.status);
+        }
+
+        const pageFiles = (await response.json()) as GitHubFileDiff[];
+        allFiles.push(...pageFiles);
+
+        if (pageFiles.length < perPage) {
+          break;
+        }
+        page++;
       }
 
-      return (await response.json()) as GitHubFileDiff[];
+      return allFiles;
     } catch (error) {
       if (error instanceof GitHubApiError) throw error;
       throw new GitHubApiError((error as Error).message);
