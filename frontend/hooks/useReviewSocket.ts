@@ -149,6 +149,11 @@ export function useReviewSocket({
       }
     };
 
+    const handleConnect = () => {
+      socket.emit('join:review', { reviewId });
+    };
+    socket.on('connect', handleConnect);
+
     socket.on('comment:new', handleNewComment);
     socket.on('comment:resolved', handleResolved);
     socket.on('comment:upvoted', handleUpvoted);

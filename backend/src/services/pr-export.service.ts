@@ -36,15 +36,12 @@ export class PrExportService {
 
     const files = Array.from(fileSet);
 
-    // Properly await async file risk calculation using Promise.all
-    const riskResults = await Promise.all(
-      files.map(async (filePath) => {
-        const fileComments = comments.filter((c) => c.filePath === filePath);
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        return fileComments.length * 15;
-      })
-    );
-    const fileRiskAccumulator = riskResults.reduce((acc, val) => acc + val, 0);
+    let fileRiskAccumulator = 0;
+    files.forEach(async (filePath) => {
+      const fileComments = comments.filter((c) => c.filePath === filePath);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      fileRiskAccumulator += fileComments.length * 15;
+    });
 
     // Safe division avoiding NaN when files.length is 0
     const avgIssuesPerFile = files.length > 0 ? comments.length / files.length : 0;
