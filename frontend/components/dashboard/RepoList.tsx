@@ -19,8 +19,8 @@ export function RepoList({
   isLoading,
 }: RepoListProps) {
   const [search, setSearch] = useState('');
-
-  const filteredRepos = repos.filter((r) =>
+  const sortedRepos = repos.sort((a, b) => b.stargazers_count - a.stargazers_count);
+  const filteredRepos = sortedRepos.filter((r) =>
     r.full_name.toLowerCase().includes(search.toLowerCase())
   );
 

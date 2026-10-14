@@ -221,7 +221,7 @@ export const githubService = {
   ): Promise<string> {
     try {
       const response = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}`,
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${repo}/pulls/${pullNumber}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
