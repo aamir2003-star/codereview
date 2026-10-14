@@ -465,8 +465,18 @@ export const reviewController = {
                   }
 
                   if (comments.length > 0) {
+                    // Deduplicate comments that report the same issue
+                    const uniqueComments = comments.filter((comment, idx, arr) => {
+                      return !arr.slice(0, idx).some(prev =>
+                        Math.abs(prev.line - comment.line) <= 3 &&
+                        (prev.message.includes(comment.message.slice(0, 50)) ||
+                         comment.message.includes(prev.message.slice(0, 50)) ||
+                         prev.severity === comment.severity && Math.abs(prev.line - comment.line) <= 1)
+                      );
+                    });
+
                     const docs = await Comment.insertMany(
-                      comments.map((c) => ({
+                      uniqueComments.map((c) => ({
                         reviewId: review._id,
                         filePath: file.filename,
                         lineNumber: c.line,
@@ -477,7 +487,7 @@ export const reviewController = {
                     );
 
                     totalComments += docs.length;
-                    console.log(`[Review] Found ${docs.length} issues in ${file.filename}`);
+                    console.log(`[Review] Found ${docs.length} issues in ${file.filename} (${comments.length - uniqueComments.length} duplicates removed)`);
 
                     for (const doc of docs) {
                       io?.to(`review:${reviewId}`).emit('comment:new', {
@@ -576,26 +586,39 @@ export const reviewController = {
             );
 
             if (crossFileComments.length > 0) {
-              // Assign cross-file comments to the first mentioned file in the message
-              const crossDocs = await Comment.insertMany(
-                crossFileComments.map((c) => ({
-                  reviewId: review._id,
-                  filePath: 'cross-file',
-                  lineNumber: c.line,
-                  severity: c.severity,
-                  message: c.message,
-                  suggestedFix: c.suggestedFix || undefined,
-                }))
-              );
+              // Deduplicate cross-file comments against per-file comments already saved
+              const allSavedComments = await Comment.find({ reviewId: review._id });
+              const uniqueCrossComments = crossFileComments.filter((cc) => {
+                return !allSavedComments.some((saved) =>
+                  Math.abs(saved.lineNumber - cc.line) <= 3 &&
+                  (saved.message.includes(cc.message.slice(0, 50)) ||
+                   cc.message.includes(saved.message.slice(0, 50)))
+                );
+              });
+
+              if (uniqueCrossComments.length === 0) {
+                console.log(`[Review] Cross-file review found ${crossFileComments.length} issues, all duplicates of per-file findings.`);
+              } else {
+                const crossDocs = await Comment.insertMany(
+                  uniqueCrossComments.map((c) => ({
+                    reviewId: review._id,
+                    filePath: 'cross-file',
+                    lineNumber: c.line,
+                    severity: c.severity,
+                    message: c.message,
+                    suggestedFix: c.suggestedFix || undefined,
+                  }))
+                );
 
               totalComments += crossDocs.length;
-              console.log(`[Review] Cross-file review found ${crossDocs.length} integration issues.`);
+              console.log(`[Review] Cross-file review found ${crossDocs.length} integration issues (${crossFileComments.length - uniqueCrossComments.length} duplicates removed).`);
 
               for (const doc of crossDocs) {
                 io?.to(`review:${reviewId}`).emit('comment:new', {
                   reviewId,
                   comment: doc.toObject(),
                 });
+              }
               }
             } else {
               console.log('[Review] Cross-file review found no integration issues.');
