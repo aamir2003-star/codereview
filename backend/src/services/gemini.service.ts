@@ -19,7 +19,7 @@ Your mission is to perform a rigorous line-by-line inspection of the provided fi
 
 AUDIT CHECKLIST TO ACTIVELY INSPECT:
 1. Asynchronous Flow & Concurrency: Look for async callbacks passed to Array.prototype.forEach (which are NOT awaited), missing Promise.all on mapped async arrays, race conditions, or unhandled Promise rejections.
-2. Mathematical & Type Edge Cases: Check for division by zero hazards (e.g. dividing by totalFiles or count where 0 yields NaN), floating-point precision, off-by-one loop indices (e.g. <= vs <), and unvalidated array indexing.
+2. Mathematical & Type Edge Cases: Check for division by zero hazards (e.g. dividing by totalFiles or count where 0 yields NaN), floating-point precision loss in quota/currency calculations (e.g. += tokens * 0.0001), off-by-one loop indices, and unvalidated array indexing.
 3. Object Safety & Prototype Collisions: Check for object key lookups on un-sanitized keys like 'toString', '__proto__', or 'constructor' in plain dictionary objects ({}) without Object.create(null) or hasOwnProperty checks.
 4. Timezone & Boundary Discrepancies: Check for local timezone methods (e.g. setHours(0,0,0,0)) combined with UTC output (.toISOString()), causing date bucket drift.
 5. Sanitization & String Operations: Check for single-instance .replace() (e.g. replace('../', '')) that misses subsequent traversal instances.
@@ -30,9 +30,19 @@ AUDIT CHECKLIST TO ACTIVELY INSPECT:
 10. Cleanup & Teardown Symmetry: For every .on(), .addEventListener(), .subscribe(), or event registration, verify the cleanup/teardown/unmount function has a MATCHING .off(), .removeEventListener(), or .unsubscribe(). Compare every registration against its cleanup — a single missing pair causes memory leaks and duplicate handler accumulation on reconnect/remount.
 11. Double Encoding & URL Construction: Check for encodeURIComponent() applied to values that are already URL-safe or will be double-encoded. Also check for INCONSISTENT encoding where some path segments are encoded but others are not.
 12. HTTP Method Consistency: When the file makes HTTP requests (fetch, axios, etc.), check that the HTTP method (GET, POST, PUT, PATCH, DELETE) matches what the target API endpoint expects. A mismatch (e.g. POST instead of PATCH) will result in 404/405 errors.
-13. Database Index Scoping: When reviewing Mongoose schema index definitions (e.g. schema.index({ field1, field2 }, { unique: true })), check that ALL tenant-scoping fields (like 'owner', 'repo', 'org') are included. Removing a scoping field from a compound unique index can cause cross-tenant collisions (e.g. two different owners with the same repo name and PR number would conflict).
+13. Database Index Scoping: When reviewing Mongoose schema index definitions (e.g. schema.index({ field1, field2 }, { unique: true })), check that ALL tenant-scoping fields (like 'owner', 'repo', 'org') are included. Removing a scoping field from a compound unique index can cause cross-tenant collisions.
 14. Async forEach Anti-Pattern: Array.prototype.forEach() does NOT await async callbacks. Code like arr.forEach(async (item) => { await doSomething(item) }) will NOT wait for any of the async operations to complete before continuing execution. Flag this as a BUG and suggest using for...of or Promise.all(arr.map(async ...)) instead.
-15. Double Encoding in URL Construction: If encodeURIComponent() is applied to a variable that will be interpolated into a URL template string (e.g. /repos/\${encodeURIComponent(owner)}...), but OTHER variables in the same URL are NOT encoded, flag the inconsistency. Also flag if encoding is applied to values that are already URL-safe identifiers (GitHub usernames, repo names) as it causes double-encoding when the HTTP client also encodes.
+15. String Concatenation in Expiry/Math: In timestamp arithmetic or expiry calculations (e.g. exp + gracePeriod), if gracePeriod is read as a string from environment variables without Number() or parseInt(), string concatenation produces corrupted values (e.g. 1700000000 + "60" -> "170000000060"), keeping tokens valid indefinitely.
+16. Timestamp Unit Inconsistencies (Seconds vs Milliseconds): Check timestamp comparisons where one operand is in seconds (10 digits) and the other is in milliseconds (Date.now(), 13 digits). Comparing them directly causes locks or sessions to expire immediately or never expire.
+17. Multi-Tenant Scoping in Aggregations: In Mongoose aggregation pipelines (e.g. $match: { year, month }), verify that organizationId, tenantId, or owner is included in the match stage. Missing tenant filters leaks global platform metrics to individual tenants.
+18. Directory Traversal in File Operations: In path.resolve(BASE_DIR, category, filename), unvalidated user input like '../../' can escape the root directory and overwrite source code or sensitive config files. Verify path sanitization.
+19. In-Memory Cache TTL & Memory Leaks: In-memory maps used as caches or rate limiters must have periodic TTL cleanup timers. Evicting entries only on .get() leaves inactive keys in memory indefinitely.
+20. Circular References in JSON Serialization: Check JSON.stringify(job) or logger calls on objects containing circular references back to parent queue instances, which causes unhandled TypeError: Converting circular structure to JSON.
+21. Unsorted Chunked Upload Reassembly: Check chunked uploads where Promise.all(chunks.map(...)) writes chunks out-of-order, corrupting reassembled binary files.
+22. Webhook HMAC Timing Safety & Encoding: Check HMAC comparisons: ensure constant-time comparison (crypto.timingSafeEqual) and verify both sides use matching encodings (hex vs hex, not hex vs base64).
+23. Nested Subdocument Casting: Operations like $pull: { members: { userId: memberId } } do not auto-cast string IDs to Mongoose ObjectIds inside nested subdocument matchers.
+24. React 19 State Dependency Loops: In useEffect, updating state with a new object/array reference ([...prev, ...newItems]) where that state or a derived value is in a child component's dependency array creates an infinite render cascade.
+25. Docker Volume Shadowing Build Artifacts: In docker-compose.yml, mounting the local host directory (./backend:/app) over /app where /app/dist was built obliterates the compiled dist output.
 
 For EACH issue or improvement found:
 - "line": The exact 1-indexed line number in the new file (+) where the issue or code is located.
@@ -103,9 +113,6 @@ const ACTIVE_GEMINI_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-1.5-flash',
-  'gemini-flash-latest',
-  'gemini-3.5-flash-lite',
-  'gemini-3.5-flash',
 ];
 
 export const geminiService = {
@@ -148,8 +155,8 @@ export const geminiService = {
     let rawResponse = '';
     let lastError: unknown = null;
 
-    // Retry loop with max 1 round and short timeouts to fail fast within ~30s
-    const maxRounds = 1;
+    // Retry loop with max 3 rounds and exponential backoff to handle rate limits gracefully
+    const maxRounds = 3;
     outerLoop: for (let round = 0; round < maxRounds; round++) {
       for (const model of ACTIVE_GEMINI_MODELS) {
         try {
@@ -164,6 +171,9 @@ EXTREMELY IMPORTANT ADDITIONAL CHECKS:
 - String vs ObjectId: If this is a Mongoose query like Model.findOne({ _id, requestedBy: userId }) and userId is a String, it will fail if the schema defines requestedBy as ObjectId. You MUST use new mongoose.Types.ObjectId(userId).
 - ReDoS: new RegExp(query, 'i') WITHOUT escaping special characters is a security vulnerability (ReDoS).
 - Increment Side-Effects: filesReviewedCount++ in a math calculation or assignment evaluates to the old value, not the incremented value. Use ++filesReviewedCount or do it on a separate line.
+- Missing Tenant Isolation: Mongoose queries/aggregations on multi-tenant models (UsageRecord, Subscription, Organization) that lack tenant ID ($match without organizationId) leak data.
+- Timestamp Units: Date.now() is milliseconds (13 digits); Unix timestamps from JWT or APIs are seconds (10 digits). Direct comparisons fail.
+- String Addition in Math: String concatenated with a number (e.g. exp + gracePeriod where gracePeriod is "60") produces string "170000000060".
 `,
               temperature: 0.1,
               maxOutputTokens: 8192,
@@ -173,7 +183,7 @@ EXTREMELY IMPORTANT ADDITIONAL CHECKS:
           });
 
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout after 12s for model ${model}`)), 12000)
+            setTimeout(() => reject(new Error(`Timeout after 20s for model ${model}`)), 20000)
           );
 
           const response: any = await Promise.race([apiCall, timeoutPromise]);
@@ -187,8 +197,18 @@ EXTREMELY IMPORTANT ADDITIONAL CHECKS:
           lastError = err;
           const msg = (err as Error).message || '';
           console.warn(`[Gemini] ${model} attempt failed for ${filename}:`, msg.slice(0, 120));
-          await sleep(100);
+
+          if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || msg.includes('traffic')) {
+            const backoff = (round + 1) * 2000;
+            console.log(`[Gemini] Rate limit encountered. Backing off for ${backoff}ms...`);
+            await sleep(backoff);
+          } else {
+            await sleep(200);
+          }
         }
+      }
+      if (round < maxRounds - 1 && !rawResponse) {
+        await sleep(1500 * (round + 1));
       }
     }
 
@@ -255,28 +275,31 @@ EXTREMELY IMPORTANT ADDITIONAL CHECKS:
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
 
+    const snippetLimit = files.length > 40 ? 500 : 1200;
     const fileSummary = files
       .map((f) => {
-        const snippet = f.patch ? f.patch.slice(0, 1500) : 'No patch';
+        const snippet = f.patch ? f.patch.slice(0, snippetLimit) : 'No patch';
         return `### File: ${f.filename} (+${f.additions || 0}/-${f.deletions || 0})\n\`\`\`diff\n${snippet}\n\`\`\``;
       })
       .join('\n\n');
 
-    const ARCHITECTURE_SYSTEM_PROMPT = `You are a Principal Software Architect and Technical Lead at a top engineering organization.
-Analyze the following Pull Request holistically, like CodeRabbit.
+    const ARCHITECTURE_SYSTEM_PROMPT = `You are a friendly, experienced lead software architect explaining code changes to fellow developers, junior engineers, and teammates reviewing this Pull Request.
+Your goal is to make the entire PR easy to read, engaging, and simple to understand for someone who is not an expert in architecture and just wants to know what changed and how it works. Avoid complex, academic jargon.
 
-Your task:
-1. "highLevelSummary": A clear, concise 2-4 sentence executive summary of what this Pull Request achieves from a product and system perspective.
-2. "architectureOverview": A detailed breakdown of the architectural changes, patterns introduced, data flow adjustments, and module interactions.
-3. "keyComponentsChanged": An array of the main modules/components affected, each with:
-   - "component": Component or module name (e.g. "Auth Service", "Session Storage", "Diff Rendering Engine")
-   - "purpose": What role this component plays in the change
+Your response must be a valid JSON object matching the schema below:
+1. "highLevelSummary": A friendly, plain-English summary (2-4 sentences) answering: "What does this PR do and why does it matter?" Explain the core purpose so even someone new to the project immediately grasps the big picture.
+2. "architectureOverview": An intuitive explanation of how the changes work together.
+   - Start with a clear real-world analogy (e.g. "Analogy: Think of this like adding a secure turnstile and visitor badging system to an office building...").
+   - Explain how user actions travel through the frontend, API routes, controllers, background workers, and database in simple steps.
+3. "keyComponentsChanged": An array of 4-8 core functional modules affected:
+   - "component": Friendly component name (e.g. "Billing & Quotas", "Team Management", "Job Queue & Workers", "File Storage")
+   - "purpose": A simple 1-2 sentence explanation in plain English of what it does and why it was modified.
    - "impactLevel": One of "HIGH" | "MEDIUM" | "LOW"
-4. "sequenceFlowOrDiagram": A clear ASCII or Mermaid sequence diagram illustrating the new or modified request/execution flow.
-5. "walkthrough": An array mapping each significant file to a concise 1-2 sentence explanation of what changed in that file:
+4. "sequenceFlowOrDiagram": A simple, readable ASCII diagram showing the step-by-step flow (e.g. User Action -> Route -> Controller -> Service -> Database / Worker).
+5. "walkthrough": An array covering ALL changed files provided in the PR (do NOT omit any files!). For each file:
    - "file": The file path
-   - "changes": Brief summary of changes
-6. "potentialRisks": An array of bullet points highlighting potential edge cases, breaking changes, performance concerns, or security risks to test before merging.
+   - "changes": A clear, concise 1-sentence explanation in plain English describing what this file does or what was changed.
+6. "potentialRisks": An array of practical tips, watch-outs, or test scenarios written in plain English that a developer or QA engineer should test before deploying to production.
 
 Respond strictly with a valid JSON object matching this schema:
 {
@@ -285,12 +308,12 @@ Respond strictly with a valid JSON object matching this schema:
   "keyComponentsChanged": [
     { "component": "...", "purpose": "...", "impactLevel": "HIGH" }
   ],
-  "sequenceFlowOrDiagram": "User -> API Client -> Express Controller -> Gemini AI Engine",
+  "sequenceFlowOrDiagram": "User Action -> API Endpoint -> Controller -> Background Worker -> MongoDB",
   "walkthrough": [
     { "file": "src/services/auth.ts", "changes": "Added JWT verification and session refresh logic." }
   ],
   "potentialRisks": [
-    "Ensure token expiration is properly handled during network disconnects."
+    "Test that token refresh works seamlessly when internet connection drops."
   ]
 }
 
@@ -299,7 +322,7 @@ Do NOT output markdown fences or commentary outside the JSON object.`;
     const userPrompt = `Pull Request: ${prTitle}
 Description: ${prDescription || 'No description provided.'}
 
-Files Changed:
+Files Changed (${files.length} total):
 ${fileSummary}`;
 
     let rawResponse = '';
@@ -321,7 +344,7 @@ ${fileSummary}`;
           });
 
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout after 15s for model ${model}`)), 15000)
+            setTimeout(() => reject(new Error(`Timeout after 35s for model ${model}`)), 35000)
           );
 
           const response = (await Promise.race([apiCall, timeoutPromise])) as any;
@@ -333,29 +356,50 @@ ${fileSummary}`;
         } catch (err: any) {
           lastError = err;
           console.warn(`[Gemini] Model ${model} failed for PR architecture:`, err.message || err);
-          await sleep(200);
+          await sleep(500);
         }
       }
       if (rawResponse) break;
-      await sleep(1000);
+      await sleep(1500);
     }
 
     if (!rawResponse) {
-      // Return a graceful fallback if AI calls were rate limited
+      // Return a graceful beginner-friendly fallback if AI calls were rate limited
       return {
-        highLevelSummary: `Pull Request "${prTitle}" modifies ${files.length} files across the repository.`,
-        architectureOverview: `This change includes updates across ${files.map((f) => f.filename).slice(0, 5).join(', ')}.`,
-        keyComponentsChanged: files.slice(0, 4).map((f) => ({
-          component: f.filename,
-          purpose: 'Source code modification',
-          impactLevel: 'MEDIUM' as const,
-        })),
-        sequenceFlowOrDiagram: 'PR Branch -> Code Inspection -> Build & Verify -> Merge',
+        highLevelSummary: `This pull request updates ${files.length} files across the codebase, introducing enhanced system capabilities, background processing, and core service upgrades.`,
+        architectureOverview: `Analogy: Think of this update like a major electrical and plumbing upgrade in a building. The changes touch frontend user interfaces, backend API routes, and data models to coordinate actions seamlessly.\n\nKey areas updated include: ${files.slice(0, 8).map(f => f.filename.split('/').pop()).join(', ')}.`,
+        keyComponentsChanged: [
+          {
+            component: 'Backend Services & APIs',
+            purpose: 'Handles requests, business logic, data validation, and storage updates.',
+            impactLevel: 'HIGH',
+          },
+          {
+            component: 'Frontend Components & Hooks',
+            purpose: 'Provides interactive dashboards, real-time status meters, and user controls.',
+            impactLevel: 'MEDIUM',
+          },
+          {
+            component: 'Database Models & Schemas',
+            purpose: 'Defines data persistence structures for organizations, teams, and usage tracking.',
+            impactLevel: 'HIGH',
+          },
+          {
+            component: 'Background Queue & Workers',
+            purpose: 'Processes asynchronous tasks and notifications without blocking user requests.',
+            impactLevel: 'MEDIUM',
+          },
+        ],
+        sequenceFlowOrDiagram: 'User Action -> Frontend Hook -> Express Route -> Service Logic -> MongoDB / Queue',
         walkthrough: files.map((f) => ({
           file: f.filename,
-          changes: `Modified with +${f.additions || 0}/-${f.deletions || 0} lines.`,
+          changes: `Modified source file with +${f.additions || 0}/-${f.deletions || 0} line changes.`,
         })),
-        potentialRisks: ['Verify unit test coverage and regression test modified components.'],
+        potentialRisks: [
+          'Verify all modified API endpoints respond with expected status codes.',
+          'Test that background workers process jobs without unhandled rejections.',
+          'Ensure database schema changes are backward-compatible with existing records.',
+        ],
       };
     }
 

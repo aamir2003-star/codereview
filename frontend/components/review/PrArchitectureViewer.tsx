@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { PrArchitectureSummary } from '@/lib/review-api';
 import {
@@ -9,6 +9,11 @@ import {
   AlertTriangle,
   FileCode2,
   Workflow,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Lightbulb,
+  Sparkles,
 } from 'lucide-react';
 
 interface PrArchitectureViewerProps {
@@ -17,6 +22,26 @@ interface PrArchitectureViewerProps {
 }
 
 export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectureViewerProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAllFiles, setShowAllFiles] = useState(false);
+
+  const filteredWalkthrough = useMemo(() => {
+    if (!architecture?.walkthrough) return [];
+    if (!searchQuery.trim()) return architecture.walkthrough;
+    const q = searchQuery.toLowerCase();
+    return architecture.walkthrough.filter(
+      (item) =>
+        item.file.toLowerCase().includes(q) || item.changes.toLowerCase().includes(q)
+    );
+  }, [architecture?.walkthrough, searchQuery]);
+
+  const displayedWalkthrough = useMemo(() => {
+    if (showAllFiles || searchQuery.trim() || filteredWalkthrough.length <= 12) {
+      return filteredWalkthrough;
+    }
+    return filteredWalkthrough.slice(0, 12);
+  }, [filteredWalkthrough, showAllFiles, searchQuery]);
+
   if (isAnalyzing && !architecture?.highLevelSummary) {
     return (
       <div className="flex flex-col items-center justify-center p-16 text-center bg-[#0d0d0d] border border-[#262626] rounded-xl my-6">
@@ -29,13 +54,13 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
           <Workflow className="h-5 w-5 text-white" />
         </div>
         <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-          Neural Architecture Synthesis
+          Understanding Code Changes
         </span>
         <h3 className="text-lg font-semibold text-white mt-1.5">
-          Deconstructing System Topology
+          Building Beginner-Friendly Architecture Map
         </h3>
         <p className="text-sm text-[#a1a1aa] max-w-md mt-2 leading-relaxed">
-          Gemini AI is analyzing component interdependencies, architectural state mutations, and data flow pipelines for this pull request...
+          Gemini AI is analyzing what this pull request does, how files connect together, and breaking it down into simple, easy-to-understand explanations...
         </p>
       </div>
     );
@@ -46,10 +71,10 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
       <div className="flex flex-col items-center justify-center p-12 text-center bg-[#0d0d0d] border border-[#262626] rounded-xl my-6">
         <Layers className="h-8 w-8 text-[#666666] mb-3" />
         <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-          Architecture Not Generated
+          Architecture Map Not Ready
         </span>
         <p className="text-sm text-[#a1a1aa] max-w-sm mt-1.5">
-          Trigger an AI review to synthesize full system topology and CodeRabbit-style PR architecture.
+          Trigger an AI review to generate a plain-English explanation of this pull request and its architecture.
         </p>
       </div>
     );
@@ -57,35 +82,37 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
 
   return (
     <div className="space-y-6 my-4 text-white">
-      {/* Top Banner / Executive Summary */}
+      {/* Top Banner / What This PR Does (Plain English) */}
       <div className="border border-[#262626] bg-[#0d0d0d] p-6 sm:p-7 rounded-xl space-y-4">
         <div className="flex items-center justify-between gap-4 border-b border-[#262626] pb-3.5">
           <div className="flex items-center gap-2.5">
-            <span className="h-2 w-2 rounded-full bg-white shadow-[0_0_8px_#ffffff]" />
-            <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-              PR Architecture Specification
+            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+            <span className="font-mono text-xs uppercase tracking-wider text-[#e4e4e7]">
+              PR Overview &amp; Architecture Map
             </span>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-[#a1a1aa] px-3 py-1 border border-[#3a3a3a] rounded-full">
-            CodeRabbit Engine
+          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-[#a1a1aa] px-3 py-1 border border-[#3a3a3a] rounded-full">
+            <Sparkles className="h-3 w-3 text-amber-400" />
+            Plain-English Guide
           </span>
         </div>
 
         {/* High-level Summary */}
         <div className="space-y-2">
-          <h2 className="text-base font-semibold text-white tracking-tight">
-            Executive Summary
+          <h2 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-amber-400" />
+            What This Pull Request Does
           </h2>
-          <p className="text-sm text-[#d4d4d8] leading-relaxed">
+          <p className="text-sm sm:text-[15px] text-[#e4e4e7] leading-relaxed">
             {architecture.highLevelSummary}
           </p>
         </div>
 
-        {/* Architecture Overview */}
+        {/* Architecture Overview & Metaphor */}
         {architecture.architectureOverview && (
           <div className="pt-4 border-t border-[#262626] space-y-2">
             <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-              System Topology &amp; Patterns
+              How the System Fits Together
             </span>
             <p className="text-sm text-[#a1a1aa] leading-relaxed whitespace-pre-line">
               {architecture.architectureOverview}
@@ -99,7 +126,10 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
         <div className="border border-[#262626] bg-[#0d0d0d] rounded-xl p-6 sm:p-7 space-y-4">
           <div className="flex items-center justify-between">
             <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-              Mutated System Components ({architecture.keyComponentsChanged.length})
+              Core Areas Changed ({architecture.keyComponentsChanged.length})
+            </span>
+            <span className="text-xs text-[#71717a]">
+              What each part does &amp; why it matters
             </span>
           </div>
 
@@ -107,10 +137,10 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
             {architecture.keyComponentsChanged.map((comp, idx) => (
               <div
                 key={idx}
-                className="border border-[#262626] bg-[#141414] p-4 rounded-lg space-y-1.5"
+                className="border border-[#262626] bg-[#141414] p-4 rounded-lg space-y-2 hover:border-[#383838] transition-colors"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs font-medium text-white truncate">
+                  <span className="font-mono text-xs font-semibold text-white truncate">
                     {comp.component}
                   </span>
                   <span
@@ -134,12 +164,12 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
         </div>
       )}
 
-      {/* Sequence / Flow Diagram */}
+      {/* Step-by-Step Request Flow Diagram */}
       {architecture.sequenceFlowOrDiagram && (
         <div className="border border-[#262626] bg-[#0d0d0d] rounded-xl p-6 sm:p-7 space-y-3.5">
           <div className="flex items-center justify-between border-b border-[#262626] pb-3">
             <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-              Data Flow &amp; Execution Pipeline
+              How Requests Flow (Step-by-Step)
             </span>
             <Cpu className="h-4 w-4 text-[#999999]" />
           </div>
@@ -152,18 +182,32 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
 
       {/* File-by-File Walkthrough */}
       {architecture.walkthrough && architecture.walkthrough.length > 0 && (
-        <div className="border border-[#262626] bg-[#0d0d0d] rounded-xl p-6 sm:p-7 space-y-3.5">
-          <div className="flex items-center justify-between border-b border-[#262626] pb-3">
-            <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
-              Changes Walkthrough ({architecture.walkthrough.length} Files)
-            </span>
-            <FileCode2 className="h-4 w-4 text-[#999999]" />
+        <div className="border border-[#262626] bg-[#0d0d0d] rounded-xl p-6 sm:p-7 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#262626] pb-3.5">
+            <div className="flex items-center gap-2">
+              <FileCode2 className="h-4 w-4 text-[#999999]" />
+              <span className="font-mono text-xs uppercase tracking-wider text-[#999999]">
+                File-by-File Walkthrough ({architecture.walkthrough.length} Files)
+              </span>
+            </div>
+
+            {/* Search / Filter Input */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-[#71717a]" />
+              <input
+                type="text"
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-[#141414] border border-[#262626] rounded-md pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#71717a] focus:outline-none focus:border-white/40"
+              />
+            </div>
           </div>
 
           <div className="divide-y divide-[#262626]">
-            {architecture.walkthrough.map((item, idx) => (
-              <div key={idx} className="py-3 flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-6">
-                <div className="font-mono text-xs text-white shrink-0 sm:w-1/3 truncate">
+            {displayedWalkthrough.map((item, idx) => (
+              <div key={idx} className="py-3 flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-6 hover:bg-white/[0.02] px-2 rounded-lg transition-colors">
+                <div className="font-mono text-xs text-white shrink-0 sm:w-2/5 break-all">
                   {item.file}
                 </div>
                 <div className="text-xs sm:text-sm text-[#a1a1aa] leading-relaxed flex-1">
@@ -171,24 +215,53 @@ export function PrArchitectureViewer({ architecture, isAnalyzing }: PrArchitectu
                 </div>
               </div>
             ))}
+
+            {displayedWalkthrough.length === 0 && (
+              <div className="py-8 text-center text-xs text-[#71717a]">
+                No files matched &ldquo;{searchQuery}&rdquo;
+              </div>
+            )}
           </div>
+
+          {/* Expand / Collapse toggle for large PRs */}
+          {!searchQuery && architecture.walkthrough.length > 12 && (
+            <div className="pt-2 flex justify-center border-t border-[#262626]">
+              <button
+                type="button"
+                onClick={() => setShowAllFiles(!showAllFiles)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#141414] border border-[#262626] hover:border-white/30 text-xs font-mono text-[#e4e4e7] transition-colors"
+              >
+                {showAllFiles ? (
+                  <>
+                    <ChevronUp className="h-3.5 w-3.5" />
+                    Show Less (First 12 Files)
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                    Show All {architecture.walkthrough.length} Files
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Potential Risks & Verification Points */}
+      {/* Helpful Watch-Outs & Things to Test */}
       {architecture.potentialRisks && architecture.potentialRisks.length > 0 && (
         <div className="border border-[#262626] bg-[#0d0d0d] rounded-xl p-6 sm:p-7 space-y-3.5">
           <div className="flex items-center gap-2 border-b border-[#262626] pb-3">
             <AlertTriangle className="h-4 w-4 text-[#d4a017]" />
             <span className="font-mono text-xs uppercase tracking-wider text-[#e4e4e7]">
-              Risk Assessment &amp; Directives
+              Helpful Watch-Outs &amp; Things to Test
             </span>
           </div>
 
-          <ul className="space-y-2">
+          <ul className="space-y-2.5">
             {architecture.potentialRisks.map((risk, idx) => (
               <li key={idx} className="flex items-start gap-2.5">
-                <span className="font-mono text-xs text-[#71717a] mt-0.5 shrink-0">
+                <span className="font-mono text-xs text-amber-400 mt-0.5 shrink-0">
                   {idx + 1}.
                 </span>
                 <span className="text-xs sm:text-sm text-[#d4d4d8] leading-relaxed">

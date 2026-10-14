@@ -226,11 +226,12 @@ export const reviewController = {
     let review = await Review.findOne({ owner, repo, pullNumber });
 
     if (review) {
-      // Re-run requested: clear old comments so a fresh comprehensive review runs
-      console.log(`[Review] Re-running review for ${owner}/${repo} #${pullNumber}. Clearing old comments for fresh analysis.`);
+      // Re-run requested: clear old comments and architecture summary so fresh comprehensive review runs
+      console.log(`[Review] Re-running review for ${owner}/${repo} #${pullNumber}. Clearing old comments and architecture for fresh analysis.`);
       await Comment.deleteMany({ reviewId: review._id });
       review.status = 'pending';
       review.totalComments = 0;
+      review.architectureSummary = undefined;
       await review.save();
     } else {
       // First time reviewing this PR
@@ -328,7 +329,8 @@ export const reviewController = {
 
         let totalComments = 0;
         let filesReviewedCount = 0;
-        const CONCURRENCY_LIMIT = 3;
+        const CONCURRENCY_LIMIT = 2;
+        const failedFiles: typeof filesToReview = [];
 
         // Phase 2 (upgraded): Pre-fetch static context files from the repo
         // These are actual source files (routes, models, schemas) fetched via GitHub API,
@@ -494,6 +496,8 @@ export const reviewController = {
                   console.error(`[Review] Error analyzing ${file.filename}:`, err instanceof Error ? err.message : err);
                   const errMsg = err instanceof Error ? err.message : String(err);
 
+                  failedFiles.push(file);
+
                   io?.to(`review:${reviewId}`).emit('file:error', {
                     reviewId,
                     filename: file.filename,
@@ -501,8 +505,8 @@ export const reviewController = {
                   });
 
                   // Add a small pause if rate-limited so subsequent files succeed
-                  if (errMsg.includes('429') || errMsg.includes('traffic') || errMsg.includes('quota')) {
-                    await new Promise((r) => setTimeout(r, 1500));
+                  if (errMsg.includes('429') || errMsg.includes('traffic') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+                    await new Promise((r) => setTimeout(r, 2000));
                   }
                 }
 
@@ -530,12 +534,70 @@ export const reviewController = {
                   currentFile: file.filename,
                   totalComments,
                 });
+
+                // Polite pacing between files in each worker to avoid burst 429s
+                await new Promise((r) => setTimeout(r, 600));
               }
             })()
           );
         }
 
         await Promise.all(workers);
+
+        // Phase 2.5: Retry pass for any files that failed due to transient rate limits
+        if (failedFiles.length > 0 && !activeReviewAborts.get(reviewId)) {
+          console.log(`[Review] Running retry pass for ${failedFiles.length} file(s) that encountered errors...`);
+          await new Promise((r) => setTimeout(r, 2000));
+          for (const file of failedFiles) {
+            if (activeReviewAborts.get(reviewId)) break;
+            if (!file.patch) continue;
+            try {
+              console.log(`[Review] [Retry Pass] Analyzing ${file.filename}...`);
+              const dynamicContext = getRelatedFilesFromDiff(file.filename, filesToReview);
+              const staticContext = staticContextCache.get(file.filename) || [];
+              const seenFiles = new Set<string>();
+              const contextFiles: Array<{ filename: string; snippet: string }> = [];
+              for (const ctx of [...staticContext, ...dynamicContext]) {
+                if (!seenFiles.has(ctx.filename)) {
+                  seenFiles.add(ctx.filename);
+                  contextFiles.push(ctx);
+                }
+              }
+
+              const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
+              if (comments.length > 0) {
+                const existingInDb = await Comment.find({ reviewId: review._id, filePath: file.filename });
+                const newComments = comments.filter((c) =>
+                  !existingInDb.some((e) => e.lineNumber === c.line && e.message.trim().toLowerCase() === c.message.trim().toLowerCase())
+                );
+
+                if (newComments.length > 0) {
+                  const docs = await Comment.insertMany(
+                    newComments.map((c) => ({
+                      reviewId: review._id,
+                      filePath: file.filename,
+                      lineNumber: c.line,
+                      severity: c.severity,
+                      message: c.message,
+                      suggestedFix: c.suggestedFix || undefined,
+                    }))
+                  );
+                  totalComments += docs.length;
+                  console.log(`[Review] [Retry Pass] Found ${docs.length} issues in ${file.filename}`);
+                  for (const doc of docs) {
+                    io?.to(`review:${reviewId}`).emit('comment:new', {
+                      reviewId,
+                      comment: doc.toObject(),
+                    });
+                  }
+                }
+              }
+              await new Promise((r) => setTimeout(r, 1000));
+            } catch (retryErr) {
+              console.warn(`[Review] [Retry Pass] Still failed for ${file.filename}:`, retryErr instanceof Error ? retryErr.message : retryErr);
+            }
+          }
+        }
 
         // Phase 3: Cross-file integration review — analyze ALL files together
         if (!activeReviewAborts.get(reviewId) && filesToReview.length > 1) {
