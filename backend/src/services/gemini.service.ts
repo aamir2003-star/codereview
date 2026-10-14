@@ -109,10 +109,18 @@ function repairAndParseJsonArray(raw: string): any[] {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function normalizeSeverity(raw?: string): 'bug' | 'security' | 'smell' | 'nit' {
+  const s = (raw || '').toLowerCase();
+  if (s.includes('sec') || s.includes('vuln') || s.includes('auth') || s.includes('traversal')) return 'security';
+  if (s.includes('smell') || s.includes('clean') || s.includes('style') || s.includes('practice')) return 'smell';
+  if (s.includes('nit') || s.includes('minor') || s.includes('info')) return 'nit';
+  return 'bug';
+}
+
 const ACTIVE_GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.5-flash',
 ];
 
 export const geminiService = {
@@ -230,12 +238,12 @@ EXTREMELY IMPORTANT ADDITIONAL CHECKS:
           (c) =>
             typeof c.line === 'number' &&
             typeof c.message === 'string' &&
-            ['bug', 'security', 'smell', 'nit'].includes(c.severity)
+            c.message.trim().length > 0
         )
         .map((c) => ({
           line: Math.max(1, Math.floor(c.line)),
-          severity: c.severity,
-          message: c.message,
+          severity: normalizeSeverity(c.severity),
+          message: c.message.trim(),
           suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
         }));
     } catch (err) {
@@ -543,12 +551,12 @@ Do NOT include markdown fences or prose outside the JSON array.`;
           (c) =>
             typeof c.line === 'number' &&
             typeof c.message === 'string' &&
-            ['bug', 'security', 'smell', 'nit'].includes(c.severity)
+            c.message.trim().length > 0
         )
         .map((c) => ({
           line: Math.max(1, Math.floor(c.line)),
-          severity: c.severity,
-          message: `[Cross-File] ${c.message}`,
+          severity: normalizeSeverity(c.severity),
+          message: `[Cross-File] ${c.message.trim()}`,
           suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
         }));
     } catch (err) {
@@ -662,12 +670,12 @@ Do NOT include markdown fences or prose.`;
           (c) =>
             typeof c.line === 'number' &&
             typeof c.message === 'string' &&
-            ['bug', 'security', 'smell', 'nit'].includes(c.severity)
+            c.message.trim().length > 0
         )
         .map((c) => ({
           line: Math.max(1, Math.floor(c.line)),
-          severity: c.severity,
-          message: `[Security Scan] ${c.message}`,
+          severity: normalizeSeverity(c.severity) === 'smell' || normalizeSeverity(c.severity) === 'nit' ? 'security' : normalizeSeverity(c.severity),
+          message: `[Security Scan] ${c.message.trim()}`,
           suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
         }));
     } catch (err) {
