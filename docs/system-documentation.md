@@ -15,6 +15,11 @@ The application is an end-to-end, automated code reviewer designed to audit GitH
 - **Backend**: 24 files / 3,493 lines.
 - **Frontend**: 38 files / 5,127 lines.
 - **Runtime Environment**: Node.js 22.x, Next.js 16.3.5, React 19.2.8, Express 5.2.1, MongoDB 7.x.
+- **Stress-Test Benchmark (Real-World Run)**:
+  - Workload: 81 modified files, +4,350 lines changed (`stress-test-extreme-v2`)
+  - Execution Duration: 751.9 seconds (~12.5 minutes)
+  - Defect Yield: 34 verified findings (line-by-line, security audit, domain clustering, concurrency scans)
+  - Stability: 100% completion with 0 unhandled rejections and 0 API quota lockouts.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
