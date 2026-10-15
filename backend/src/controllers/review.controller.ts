@@ -30,9 +30,15 @@ const IGNORED_EXTENSIONS = [
   '.jpeg',
   '.gif',
   '.ico',
+  '.webp',
   '.min.js',
   '.min.css',
   '.map',
+  '.md',
+  '.markdown',
+  '.txt',
+  '.csv',
+  '.pdf',
 ];
 
 const IGNORED_PATHS = [
@@ -403,7 +409,7 @@ export const reviewController = {
 
         let totalComments = 0;
         let filesReviewedCount = 0;
-        const CONCURRENCY_LIMIT = 2;
+        const CONCURRENCY_LIMIT = 3;
         const failedFiles: typeof filesToReview = [];
 
         // Phase 2 (upgraded): Pre-fetch static context files from the repo
@@ -510,46 +516,16 @@ export const reviewController = {
                     console.log(`[Review] Injecting ${contextFiles.length} context file(s) for ${file.filename} (${staticContext.length} from repo, ${dynamicContext.length} from PR)`);
                   }
 
-                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
-
-                  // Phase 4: Run dedicated security scanner on sensitive files
-                  if (isSecuritySensitive(file.filename)) {
-                    console.log(`[Security] Running security scan on ${file.filename}...`);
-                    try {
-                      const secComments = await geminiService.securityScanFile(file.filename, file.patch, contextFiles);
-                      // Deduplicate: only skip security comments that are identical to an existing comment
-                      for (const sc of secComments) {
-                        const isDuplicate = comments.some(
-                          (c) => c.line === sc.line && c.message.trim().toLowerCase() === sc.message.trim().toLowerCase()
-                        );
-                        if (!isDuplicate) {
-                          comments.push(sc);
-                        }
-                      }
-                      console.log(`[Security] Found ${secComments.length} security-specific issues in ${file.filename}`);
-                    } catch (secErr) {
-                      console.warn(`[Security] Security scan failed for ${file.filename}:`, secErr instanceof Error ? secErr.message : secErr);
-                    }
+                  const isSec = isSecuritySensitive(file.filename);
+                  const isConc = isConcurrencySensitive(file.filename);
+                  if (isSec || isConc) {
+                    console.log(`[Review] Applying specialized directives for ${file.filename} (security: ${isSec}, concurrency: ${isConc})`);
                   }
 
-                  // Phase 4B: Run dedicated concurrency & state mutation scan for queue/cache/scheduler files
-                  if (isConcurrencySensitive(file.filename)) {
-                    console.log(`[Concurrency] Running concurrency scan on ${file.filename}...`);
-                    try {
-                      const concComments = await geminiService.concurrencyScanFile(file.filename, file.patch, contextFiles);
-                      for (const cc of concComments) {
-                        const isDuplicate = comments.some(
-                          (c) => c.line === cc.line && c.message.trim().toLowerCase() === cc.message.trim().toLowerCase()
-                        );
-                        if (!isDuplicate) {
-                          comments.push(cc);
-                        }
-                      }
-                      console.log(`[Concurrency] Found ${concComments.length} concurrency-specific issues in ${file.filename}`);
-                    } catch (concErr) {
-                      console.warn(`[Concurrency] Concurrency scan failed for ${file.filename}:`, concErr instanceof Error ? concErr.message : concErr);
-                    }
-                  }
+                  const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles, {
+                    isSecuritySensitive: isSec,
+                    isConcurrencySensitive: isConc,
+                  });
 
                   if (comments.length > 0) {
                     // Deduplicate comments: only remove identical duplicates on the exact same line
@@ -629,7 +605,7 @@ export const reviewController = {
                 });
 
                 // Polite pacing between files in each worker to avoid burst 429s
-                await new Promise((r) => setTimeout(r, 600));
+                await new Promise((r) => setTimeout(r, 250));
               }
             })()
           );
@@ -657,7 +633,12 @@ export const reviewController = {
                 }
               }
 
-              const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
+              const isSec = isSecuritySensitive(file.filename);
+              const isConc = isConcurrencySensitive(file.filename);
+              const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles, {
+                isSecuritySensitive: isSec,
+                isConcurrencySensitive: isConc,
+              });
               if (comments.length > 0) {
                 const existingInDb = await Comment.find({ reviewId: review._id, filePath: file.filename });
                 const newComments = comments.filter((c) =>
