@@ -5,6 +5,7 @@ export interface GeminiComment {
   severity: 'bug' | 'security' | 'smell' | 'nit';
   message: string;
   suggestedFix?: string;
+  file?: string;
 }
 
 export class GeminiApiError extends Error {
@@ -436,7 +437,150 @@ ${fileSummary}`;
   },
 
   /**
-   * Phase 3: Cross-file integration review
+   * Phase 3A: Focused Subsystem Domain Cluster Integration Review
+   * Takes a small cluster of tightly-coupled files (e.g., billing, queue, auth, rbac)
+   * and audits cross-file contract consistency, cascading failure modes, and type drift.
+   */
+  async clusterIntegrationReview(
+    clusterName: string,
+    files: Array<{ filename: string; patch: string }>,
+    referenceFiles?: Array<{ filename: string; snippet: string }>
+  ): Promise<GeminiComment[]> {
+    if (!config.geminiApiKey) {
+      throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+
+    const CLUSTER_SYSTEM_PROMPT = `You are a Principal Software Architect auditing a tightly-coupled domain subsystem: "${clusterName}".
+Your mission is to find cross-file contract bugs, cascading runtime failures, and subtle system integration defects across these ${files.length} interacting files.
+
+FOCUS AUDIT CHECKS FOR SUBSYSTEM "${clusterName}":
+1. Cross-File Contract Mismatches:
+   - Method/Verb Drift: Frontend calling POST while backend route registers PATCH, PUT, or DELETE.
+   - Key & Parameter Inconsistencies: Caller passing { memberId } or { targetId } when the callee or database query expects { userId }.
+   - Type Boundary Drift: Passing a raw string into Mongoose queries or $pull filters expecting ObjectId (e.g. $pull: { members: { userId: memberId } } where memberId is string instead of new mongoose.Types.ObjectId(memberId)).
+2. Cascading Failure Modes:
+   - Promise.race without background cancellation: timeoutPromise rejects, but the worker/fetcher keeps running and deletes shared inFlight map entries prematurely.
+   - Float Precision & Quota Drift: Performing floating-point math (e.g. += tokens * 0.0001) in metering while billing expects integer cents or exact thresholds, causing billing underflow or infinite quota.
+   - Tenant Scoping Gaps: Aggregation pipelines or queries (e.g. Subscription.findOneAndUpdate, Organization.findById) missing tenant/owner filters or accepting raw unvalidated IDs.
+   - Prototype & Dictionary Lookups: Object key lookup on plain {} objects (e.g. quotaMap[eventData.planTier]) without Object.prototype.hasOwnProperty or Object.create(null).
+   - In-Memory Cache & State Mutations: Unbounded Map objects without TTL cleanup loops. Mutating arrays/maps during iteration (e.g. in cache invalidation loops) causing skipped entries or double counting.
+   - Lock & Timer Unit Mismatches: Comparing seconds (Unix timestamp, 10 digits) with milliseconds (Date.now(), 13 digits). Mixing clearInterval with setTimeout.
+
+For EACH issue found:
+- "file": The exact file path among the reviewed files where the defect or symptom is located (e.g. "${files[0]?.filename || ''}").
+- "line": The 1-indexed line number in that file where the issue occurs.
+- "severity": "bug" | "security" | "smell"
+- "message": A clear explanation specifying both files and what goes wrong (e.g. "Cross-file contract mismatch between [FileA] and [FileB]: ...").
+- "suggestedFix": Concrete replacement code.
+
+Respond STRICTLY with a valid JSON array of objects:
+[
+  {
+    "file": "${files[0]?.filename || ''}",
+    "line": 25,
+    "severity": "bug",
+    "message": "...",
+    "suggestedFix": "..."
+  }
+]
+If no defects found, return []. Do NOT include markdown formatting or prose.`;
+
+    let combinedDiffs = '';
+    let totalChars = 0;
+    const MAX_TOTAL_CHARS = 45000;
+
+    for (const file of files) {
+      const snippet = file.patch.length > 7000 ? file.patch.slice(0, 7000) + '\n...[truncated]' : file.patch;
+      if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
+      combinedDiffs += `\n### Subsystem File: ${file.filename}\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
+      totalChars += snippet.length;
+    }
+
+    if (referenceFiles && referenceFiles.length > 0) {
+      combinedDiffs += '\n\n## Subsystem Reference Files:\n';
+      for (const ctx of referenceFiles) {
+        const snippet = ctx.snippet.length > 2500 ? ctx.snippet.slice(0, 2500) + '\n...[truncated]' : ctx.snippet;
+        if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
+        combinedDiffs += `\n### Reference: ${ctx.filename}\n\`\`\`\n${snippet}\n\`\`\`\n`;
+        totalChars += snippet.length;
+      }
+    }
+
+    const userPrompt = `Domain Subsystem: ${clusterName}\nFiles under review (${files.length} total):\n${combinedDiffs}`;
+
+    let rawResponse = '';
+    let lastError: unknown = null;
+
+    const maxRounds = 1;
+    outerLoop: for (let round = 0; round < maxRounds; round++) {
+      for (const model of ACTIVE_GEMINI_MODELS) {
+        try {
+          console.log(`[Gemini] [Cluster: ${clusterName}] Auditing ${files.length} files using ${model}...`);
+
+          const apiCall = ai.models.generateContent({
+            model,
+            config: {
+              systemInstruction: CLUSTER_SYSTEM_PROMPT,
+              temperature: 0.1,
+              maxOutputTokens: 8192,
+              responseMimeType: 'application/json',
+            },
+            contents: userPrompt,
+          });
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout after 20s for cluster ${clusterName} using ${model}`)), 20000)
+          );
+
+          const response: any = await Promise.race([apiCall, timeoutPromise]);
+          rawResponse = response.text ?? '';
+
+          if (rawResponse) {
+            console.log(`[Gemini] Cluster review for ${clusterName} completed using ${model}`);
+            break outerLoop;
+          }
+        } catch (err) {
+          lastError = err;
+          const msg = (err as Error).message || '';
+          console.warn(`[Gemini] Cluster ${clusterName} on ${model} failed:`, msg.slice(0, 120));
+          await sleep(100);
+        }
+      }
+    }
+
+    if (!rawResponse) {
+      return [];
+    }
+
+    try {
+      const parsed = repairAndParseJsonArray(rawResponse) as any[];
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .filter(
+          (c) =>
+            typeof c.line === 'number' &&
+            typeof c.message === 'string' &&
+            c.message.trim().length > 0
+        )
+        .map((c) => ({
+          file: typeof c.file === 'string' ? c.file.trim() : undefined,
+          line: Math.max(1, Math.floor(c.line)),
+          severity: normalizeSeverity(c.severity),
+          message: c.message.trim(),
+          suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
+        }));
+    } catch (err) {
+      console.error(`[Gemini] Cluster ${clusterName} parse error:`, rawResponse);
+      return [];
+    }
+  },
+
+  /**
+   * Phase 3B: Cross-file integration review
    * Reviews all changed files TOGETHER to catch cross-file consistency bugs
    * that no single-file review can detect.
    */
@@ -466,7 +610,8 @@ CROSS-FILE CHECKS:
 8. Import/Export Mismatches: A function signature changed in the source file but callers still use the old signature.
 
 For EACH cross-file issue found:
-- "line": The line number in the file where the SYMPTOM appears (the consuming/calling side).
+- "file": The exact file path among the changed files where the symptom or fix belongs (e.g. "${files[0]?.filename || ''}").
+- "line": The line number in that file where the SYMPTOM appears (the consuming/calling side).
 - "severity": "bug" | "security" | "smell"
 - "message": Explain BOTH files involved: "In [fileA] line X, ... but in [fileB] line Y, ... This causes ..."
 - "suggestedFix": The code fix for the file containing the bug.
@@ -544,7 +689,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     }
 
     try {
-      const parsed = repairAndParseJsonArray(rawResponse) as GeminiComment[];
+      const parsed = repairAndParseJsonArray(rawResponse) as any[];
       if (!Array.isArray(parsed)) return [];
 
       return parsed
@@ -555,9 +700,10 @@ Do NOT include markdown fences or prose outside the JSON array.`;
             c.message.trim().length > 0
         )
         .map((c) => ({
+          file: typeof c.file === 'string' ? c.file.trim() : undefined,
           line: Math.max(1, Math.floor(c.line)),
           severity: normalizeSeverity(c.severity),
-          message: `[Cross-File] ${c.message.trim()}`,
+          message: c.message.trim().startsWith('[') ? c.message.trim() : `[Cross-File] ${c.message.trim()}`,
           suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
         }));
     } catch (err) {
@@ -681,6 +827,137 @@ Do NOT include markdown fences or prose.`;
         }));
     } catch (err) {
       console.error('[Security] Parse error:', rawResponse);
+      return [];
+    }
+  },
+
+  /**
+   * Phase 4B: Dedicated Concurrency & State Mutation Scanner
+   * Specialized audit for queues, caches, locks, and background workers.
+   */
+  async concurrencyScanFile(
+    filename: string,
+    patch: string,
+    contextFiles?: Array<{ filename: string; snippet: string }>
+  ): Promise<GeminiComment[]> {
+    if (!config.geminiApiKey) {
+      throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
+    }
+
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: config.geminiApiKey });
+
+    const CONCURRENCY_PROMPT = `You are a Principal Distributed Systems & Concurrency Engineer.
+Your mission is to perform a deep audit on this concurrency, caching, or background worker file for race conditions, memory leaks, and asynchronous state hazards.
+
+MANDATORY CONCURRENCY AUDIT CHECKS:
+1. In-Memory Cache & Map Lifecycle:
+   - Check if in-memory Map/Set instances (caches, in-flight tracking, rate-limiters) are unbounded and lack periodic TTL expiration intervals. If keys are only evicted on .get(), inactive keys cause severe memory leaks.
+2. Invalidation & Mutation During Iteration:
+   - Mutating a Map or array while iterating over it (e.g. deleting keys during for...of or forEach, or double-counting in invalidateTags) leads to undefined behavior or incorrect counts.
+3. Timer & Handle Mismatches:
+   - Mixing timer methods: e.g. calling clearInterval(timerId) where timerId was created with setTimeout(), or vice-versa.
+4. Timestamp Unit & Clock Skew Hazards:
+   - Comparing lock expiration in seconds (Unix timestamp) with Date.now() (milliseconds) or vice-versa, causing locks to expire immediately or stay locked forever.
+5. Promise.race & Orphaned Side-Effects:
+   - In Promise.race([task(), timeout()]), when timeout fires first, task() keeps running in the background. Check if cleanup (like deleting in-flight tracking) happens prematurely or leaves unhandled rejections.
+6. Async Iteration Hazard:
+   - Passing async functions to Array.prototype.forEach(), Array.prototype.filter(), or Array.prototype.some() — these callbacks are NOT awaited, leading to race conditions where callers continue before work completes.
+7. Circular Object References in Queues:
+   - Calling JSON.stringify() or logging job objects that hold circular references back to the queue or parent worker instance, throwing TypeError at runtime.
+8. Non-Atomic Read-Modify-Write:
+   - Check-then-act patterns on shared resources without mutexes or atomic operations, allowing concurrent requests to overwrite state.
+
+For EACH issue found:
+- "line": The 1-indexed line number in the diff where the hazard exists.
+- "severity": "bug" | "security" | "smell"
+- "message": Clear description of the concurrency flaw, race condition, or memory leak.
+- "suggestedFix": Concrete code fix.
+
+Respond strictly with a valid JSON array of objects:
+[
+  {
+    "line": 15,
+    "severity": "bug",
+    "message": "...",
+    "suggestedFix": "..."
+  }
+]
+If no issues found, return []. Do NOT include markdown fences or prose.`;
+
+    const trimmedPatch = patch.length > 20000 ? patch.slice(0, 20000) + '\n...[truncated]' : patch;
+    let userPrompt = `Concurrency/Worker file: ${filename}\n\n\`\`\`diff\n${trimmedPatch}\n\`\`\``;
+
+    if (contextFiles && contextFiles.length > 0) {
+      userPrompt += '\n\n## Related files for cross-reference:\n';
+      for (const ctx of contextFiles) {
+        const trimmed = ctx.snippet.length > 2000 ? ctx.snippet.slice(0, 2000) + '\n...[truncated]' : ctx.snippet;
+        userPrompt += `### ${ctx.filename}\n\`\`\`\n${trimmed}\n\`\`\`\n\n`;
+      }
+    }
+
+    let rawResponse = '';
+    let lastError: unknown = null;
+
+    const maxRounds = 1;
+    outerLoop: for (let round = 0; round < maxRounds; round++) {
+      for (const model of ACTIVE_GEMINI_MODELS) {
+        try {
+          console.log(`[Concurrency] Scanning ${filename} using ${model}...`);
+
+          const apiCall = ai.models.generateContent({
+            model,
+            config: {
+              systemInstruction: CONCURRENCY_PROMPT,
+              temperature: 0.05,
+              maxOutputTokens: 4096,
+              responseMimeType: 'application/json',
+            },
+            contents: userPrompt,
+          });
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Concurrency scan timeout for ${model}`)), 12000)
+          );
+
+          const response: any = await Promise.race([apiCall, timeoutPromise]);
+          rawResponse = response.text ?? '';
+
+          if (rawResponse) {
+            console.log(`[Concurrency] Completed scan of ${filename} using ${model}`);
+            break outerLoop;
+          }
+        } catch (err) {
+          lastError = err;
+          console.warn(`[Concurrency] ${model} failed for ${filename}:`, ((err as Error).message || '').slice(0, 100));
+          await sleep(100);
+        }
+      }
+    }
+
+    if (!rawResponse) {
+      return [];
+    }
+
+    try {
+      const parsed = repairAndParseJsonArray(rawResponse) as any[];
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .filter(
+          (c) =>
+            typeof c.line === 'number' &&
+            typeof c.message === 'string' &&
+            c.message.trim().length > 0
+        )
+        .map((c) => ({
+          line: Math.max(1, Math.floor(c.line)),
+          severity: normalizeSeverity(c.severity),
+          message: `[Concurrency] ${c.message.trim()}`,
+          suggestedFix: typeof c.suggestedFix === 'string' ? c.suggestedFix.trim() : undefined,
+        }));
+    } catch (err) {
+      console.error('[Concurrency] Parse error:', rawResponse);
       return [];
     }
   },

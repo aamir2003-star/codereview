@@ -204,6 +204,80 @@ function isSecuritySensitive(filename: string): boolean {
   return SECURITY_PATTERNS.some((pattern) => pattern.test(filename));
 }
 
+// Phase 4B: Concurrency & State Mutation sensitive patterns
+const CONCURRENCY_PATTERNS = [
+  /queue/i,
+  /worker/i,
+  /scheduler/i,
+  /cache/i,
+  /mutex/i,
+  /lock/i,
+  /in-memory/i,
+  /dead-letter/i,
+  /job/i,
+  /metering/i,
+  /inFlight/i,
+];
+
+function isConcurrencySensitive(filename: string): boolean {
+  return CONCURRENCY_PATTERNS.some((pattern) => pattern.test(filename));
+}
+
+// Phase 3A: Domain Subsystem Definitions for Focused Clustering
+interface DomainClusterDefinition {
+  name: string;
+  patterns: RegExp[];
+}
+
+const DOMAIN_CLUSTER_DEFINITIONS: DomainClusterDefinition[] = [
+  {
+    name: 'Billing, Quota & Metering',
+    patterns: [/billing/i, /metering/i, /stripe/i, /subscription/i, /quota/i, /usage/i],
+  },
+  {
+    name: 'Job Queues, Workers & Schedulers',
+    patterns: [/queue/i, /worker/i, /scheduler/i, /dead-letter/i, /task/i, /job/i, /cache/i],
+  },
+  {
+    name: 'Organizations, Teams & RBAC',
+    patterns: [/org/i, /team/i, /member/i, /rbac/i, /role/i, /permission/i, /invite/i],
+  },
+  {
+    name: 'Storage, Uploads & Asset Bundling',
+    patterns: [/upload/i, /file-storage/i, /storage/i, /bundle/i, /analyzer/i, /asset/i],
+  },
+  {
+    name: 'Rule Engine, Policies & Evaluation',
+    patterns: [/rule/i, /policy/i, /engine/i, /condition/i, /evaluator/i],
+  },
+  {
+    name: 'Auth, Sessions & Security Middleware',
+    patterns: [/auth/i, /token/i, /jwt/i, /session/i, /cookie/i, /crypto/i],
+  },
+  {
+    name: 'Frontend API & State Management',
+    patterns: [/frontend\/(hooks|components|lib)\//i, /api\.ts/i, /review-api/i],
+  },
+];
+
+function partitionIntoDomainClusters(
+  files: Array<{ filename: string; patch: string }>
+): Array<{ name: string; files: Array<{ filename: string; patch: string }> }> {
+  const result: Array<{ name: string; files: Array<{ filename: string; patch: string }> }> = [];
+
+  for (const cluster of DOMAIN_CLUSTER_DEFINITIONS) {
+    const matchedFiles = files.filter((f) =>
+      cluster.patterns.some((pattern) => pattern.test(f.filename))
+    );
+    if (matchedFiles.length >= 2) {
+      result.push({ name: cluster.name, files: matchedFiles });
+    }
+  }
+
+  // Sort by cluster size descending, take top 4 clusters to keep audit focused and avoid API exhaustion
+  return result.sort((a, b) => b.files.length - a.files.length).slice(0, 4);
+}
+
 export const reviewController = {
   /**
    * POST /review
@@ -458,6 +532,25 @@ export const reviewController = {
                     }
                   }
 
+                  // Phase 4B: Run dedicated concurrency & state mutation scan for queue/cache/scheduler files
+                  if (isConcurrencySensitive(file.filename)) {
+                    console.log(`[Concurrency] Running concurrency scan on ${file.filename}...`);
+                    try {
+                      const concComments = await geminiService.concurrencyScanFile(file.filename, file.patch, contextFiles);
+                      for (const cc of concComments) {
+                        const isDuplicate = comments.some(
+                          (c) => c.line === cc.line && c.message.trim().toLowerCase() === cc.message.trim().toLowerCase()
+                        );
+                        if (!isDuplicate) {
+                          comments.push(cc);
+                        }
+                      }
+                      console.log(`[Concurrency] Found ${concComments.length} concurrency-specific issues in ${file.filename}`);
+                    } catch (concErr) {
+                      console.warn(`[Concurrency] Concurrency scan failed for ${file.filename}:`, concErr instanceof Error ? concErr.message : concErr);
+                    }
+                  }
+
                   if (comments.length > 0) {
                     // Deduplicate comments: only remove identical duplicates on the exact same line
                     const uniqueComments: typeof comments = [];
@@ -599,20 +692,20 @@ export const reviewController = {
           }
         }
 
-        // Phase 3: Cross-file integration review — analyze ALL files together
+        // Phase 3: Cross-file & Subsystem Integration Reviews
         if (!activeReviewAborts.get(reviewId) && filesToReview.length > 1) {
           try {
-            io?.to(`review:${reviewId}`).emit('review:progress', {
-              reviewId,
-              filesReviewed: filesReviewedCount,
-              totalFiles: filesToReview.length,
-              percent: 96,
-              stage: 'Running cross-file integration analysis...',
-              currentFile: 'Cross-File Consistency Check',
-              totalComments,
-            });
-
-            console.log(`[Review] Starting cross-file integration review for ${filesToReview.length} files...`);
+            // Helper to resolve real file path in the PR
+            const resolveFilePath = (fileHint?: string, defaultFallback: string = filesToReview[0]?.filename || 'cross-file'): string => {
+              if (fileHint && filesToReview.some((f) => f.filename === fileHint)) {
+                return fileHint;
+              }
+              if (fileHint) {
+                const match = filesToReview.find((f) => f.filename.endsWith(fileHint) || fileHint.endsWith(f.filename));
+                if (match) return match.filename;
+              }
+              return defaultFallback;
+            };
 
             // Collect all unique static context files for the cross-file review
             const allStaticContext: Array<{ filename: string; snippet: string }> = [];
@@ -626,6 +719,102 @@ export const reviewController = {
               }
             }
 
+            // Phase 3A: Domain Subsystem Cluster Reviews (Focused 2-6 file groupings)
+            const clusters = partitionIntoDomainClusters(
+              filesToReview
+                .filter((f) => f.patch)
+                .map((f) => ({ filename: f.filename, patch: f.patch! }))
+            );
+
+            if (clusters.length > 0) {
+              console.log(`[Review] Detected ${clusters.length} active domain cluster(s) for integration review: ${clusters.map((c) => `${c.name} (${c.files.length} files)`).join(', ')}`);
+
+              for (const cluster of clusters) {
+                if (activeReviewAborts.get(reviewId)) break;
+
+                try {
+                  io?.to(`review:${reviewId}`).emit('review:progress', {
+                    reviewId,
+                    filesReviewed: filesReviewedCount,
+                    totalFiles: filesToReview.length,
+                    percent: 96,
+                    stage: `Auditing ${cluster.name} subsystem integration...`,
+                    currentFile: `${cluster.name} Integration`,
+                    totalComments,
+                  });
+
+                  console.log(`[Review] Running cluster integration review for "${cluster.name}" with ${cluster.files.length} files...`);
+
+                  // Filter static context to files related to this cluster
+                  const clusterStatic = allStaticContext.filter((ctx) =>
+                    cluster.files.some((cf) => cf.filename.includes(ctx.filename.split('/').pop()?.replace(/\.[^.]+$/, '') || ''))
+                  );
+
+                  const clusterComments = await geminiService.clusterIntegrationReview(
+                    cluster.name,
+                    cluster.files,
+                    clusterStatic.length > 0 ? clusterStatic : allStaticContext.slice(0, 4)
+                  );
+
+                  if (clusterComments.length > 0) {
+                    const allSavedComments = await Comment.find({ reviewId: review._id });
+                    const newClusterComments = clusterComments.filter((cc) => {
+                      const targetPath = resolveFilePath(cc.file, cluster.files[0]?.filename);
+                      return !allSavedComments.some(
+                        (saved) =>
+                          (saved.filePath === targetPath && saved.lineNumber === cc.line) ||
+                          saved.message.trim().toLowerCase() === cc.message.trim().toLowerCase()
+                      );
+                    });
+
+                    if (newClusterComments.length > 0) {
+                      const clusterDocs = await Comment.insertMany(
+                        newClusterComments.map((c) => {
+                          const targetPath = resolveFilePath(c.file, cluster.files[0]?.filename);
+                          return {
+                            reviewId: review._id,
+                            filePath: targetPath,
+                            lineNumber: c.line,
+                            severity: c.severity,
+                            message: c.message.startsWith('[') ? c.message : `[${cluster.name}] ${c.message}`,
+                            suggestedFix: c.suggestedFix || undefined,
+                          };
+                        })
+                      );
+
+                      totalComments += clusterDocs.length;
+                      console.log(`[Review] Subsystem "${cluster.name}" found ${clusterDocs.length} integration issues.`);
+
+                      for (const doc of clusterDocs) {
+                        io?.to(`review:${reviewId}`).emit('comment:new', {
+                          reviewId,
+                          comment: doc.toObject(),
+                        });
+                      }
+                    }
+                  }
+
+                  // Gentle pacing between clusters
+                  await new Promise((r) => setTimeout(r, 600));
+                } catch (clusterErr) {
+                  console.warn(`[Review] Cluster "${cluster.name}" failed (non-fatal):`, clusterErr instanceof Error ? clusterErr.message : clusterErr);
+                }
+              }
+            }
+
+            // Phase 3B: Global Cross-File Integration Review
+            io?.to(`review:${reviewId}`).emit('review:progress', {
+              reviewId,
+              filesReviewed: filesReviewedCount,
+              totalFiles: filesToReview.length,
+              percent: 98,
+              stage: 'Running global cross-file consistency check...',
+              currentFile: 'Cross-File Consistency Check',
+              totalComments,
+            });
+
+            console.log(`[Review] Starting cross-file integration review for ${filesToReview.length} files...`);
+
             const crossFileComments = await geminiService.crossFileIntegrationReview(
               filesToReview
                 .filter((f) => f.patch)
@@ -634,11 +823,11 @@ export const reviewController = {
             );
 
             if (crossFileComments.length > 0) {
-              // Deduplicate cross-file comments: only skip if identical message was already saved
               const allSavedComments = await Comment.find({ reviewId: review._id });
               const uniqueCrossComments = crossFileComments.filter((cc) => {
+                const targetPath = resolveFilePath(cc.file, filesToReview[0]?.filename);
                 return !allSavedComments.some((saved) =>
-                  saved.lineNumber === cc.line &&
+                  (saved.filePath === targetPath && saved.lineNumber === cc.line) ||
                   saved.message.trim().toLowerCase() === cc.message.trim().toLowerCase()
                 );
               });
@@ -647,7 +836,7 @@ export const reviewController = {
                 const crossDocs = await Comment.insertMany(
                   uniqueCrossComments.map((c) => ({
                     reviewId: review._id,
-                    filePath: 'cross-file',
+                    filePath: resolveFilePath(c.file, filesToReview[0]?.filename),
                     lineNumber: c.line,
                     severity: c.severity,
                     message: c.message,
@@ -656,7 +845,7 @@ export const reviewController = {
                 );
 
                 totalComments += crossDocs.length;
-                console.log(`[Review] Cross-file review found ${crossDocs.length} integration issues.`);
+                console.log(`[Review] Global cross-file review found ${crossDocs.length} integration issues.`);
 
                 for (const doc of crossDocs) {
                   io?.to(`review:${reviewId}`).emit('comment:new', {
@@ -665,10 +854,10 @@ export const reviewController = {
                   });
                 }
               } else {
-                console.log(`[Review] Cross-file review found ${crossFileComments.length} issues, all duplicate of per-file findings.`);
+                console.log(`[Review] Cross-file review found ${crossFileComments.length} issues, all duplicate of subsystem/per-file findings.`);
               }
             } else {
-              console.log('[Review] Cross-file review found no integration issues.');
+              console.log('[Review] Cross-file review found no additional integration issues.');
             }
           } catch (crossErr) {
             console.warn('[Review] Cross-file integration review failed (non-fatal):', crossErr instanceof Error ? crossErr.message : crossErr);
