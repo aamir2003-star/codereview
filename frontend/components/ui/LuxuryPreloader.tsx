@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import KineticTextGrid from '@/components/ui/KineticTextGrid';
 
 interface LuxuryPreloaderProps {
   progress?: number;
@@ -38,9 +39,30 @@ export function LuxuryPreloader({
 
   if (isFullscreen) {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#050505] p-8 sm:p-12 text-white select-none">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-[#050505] p-8 sm:p-12 text-white select-none overflow-hidden">
+        {/* Background Kinetic Text Grid with App Name */}
+        <div className="absolute inset-0 z-0 opacity-35 pointer-events-none">
+          <KineticTextGrid
+            text="REVIEW COPILOT"
+            backgroundColor="#050505"
+            textColor="#FFFFFF"
+            font={{
+              fontFamily: 'Inter, sans-serif',
+              fontWeight: 800,
+              fontSize: 48,
+              lineHeight: '1.4em',
+              letterSpacing: '-0.02em',
+            }}
+            rowCount={5}
+            repeatCount={5}
+            rowGap={18}
+            wordGap={28}
+            zoomScalePct={115}
+          />
+        </div>
+
         {/* Top Telemetry Header */}
-        <div className="w-full max-w-5xl flex items-center justify-between text-[11px] font-mono text-[#71717a] border-b border-white/[0.06] pb-4">
+        <div className="relative z-10 w-full max-w-5xl flex items-center justify-between text-[11px] font-mono text-[#71717a] border-b border-white/[0.06] pb-4">
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#007acc] animate-ping" />
             <span className="text-white font-medium tracking-wider">REVIEWCOPILOT // TELEMETRY</span>
@@ -57,7 +79,7 @@ export function LuxuryPreloader({
         </div>
 
         {/* Central Kinetic Block */}
-        <div className="my-auto flex flex-col items-center text-center space-y-5 max-w-xl w-full">
+        <div className="relative z-10 my-auto flex flex-col items-center text-center space-y-5 max-w-xl w-full">
           <div className="font-mono text-xs uppercase tracking-[0.3em] text-[#a1a1aa]">
             Autonomous Code Intelligence
           </div>
@@ -96,7 +118,7 @@ export function LuxuryPreloader({
         </div>
 
         {/* Bottom Footer */}
-        <div className="w-full max-w-5xl flex items-center justify-between text-[10px] font-mono text-[#52525b] border-t border-white/[0.06] pt-4">
+        <div className="relative z-10 w-full max-w-5xl flex items-center justify-between text-[10px] font-mono text-[#52525b] border-t border-white/[0.06] pt-4">
           <span className="text-white/40">[+] KINETIC_RUNNER</span>
           <span className="text-white/40">STANDBY_OK</span>
         </div>
