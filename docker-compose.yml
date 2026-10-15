@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7-jammy
+    container_name: codereview-mongo
+    restart: always
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    environment:
+      MONGO_INITDB_DATABASE: codereview
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: codereview-backend
+    restart: always
+    ports:
+      - '5001:5001'
+    environment:
+      PORT: 5001
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongodb:27017/codereview
+      CLIENT_URL: http://localhost:3000
+      JWT_SECRET: production_jwt_secret_key_32_characters_minimum
+      ENCRYPTION_KEY: production_encryption_key_32_chars
+    depends_on:
+      - mongodb
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: codereview-frontend
+    restart: always
+    ports:
+      - '3000:3000'
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5001
+    depends_on:
+      - backend
+
+volumes:
+  mongo-data:
