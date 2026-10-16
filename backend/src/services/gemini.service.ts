@@ -125,17 +125,11 @@ const ACTIVE_GEMINI_MODELS = [
   'gemini-3.5-flash',
 ];
 
-export interface FileAuditOptions {
-  isSecuritySensitive?: boolean;
-  isConcurrencySensitive?: boolean;
-}
-
 export const geminiService = {
   async reviewFileDiff(
     filename: string,
     patch: string,
-    contextFiles?: Array<{ filename: string; snippet: string }>,
-    options?: FileAuditOptions
+    contextFiles?: Array<{ filename: string; snippet: string }>
   ): Promise<GeminiComment[]> {
     if (!config.geminiApiKey) {
       throw new GeminiApiError('GEMINI_API_KEY is not configured in backend .env');
@@ -168,41 +162,6 @@ export const geminiService = {
       }
     }
 
-    // Build unified system instructions combining core rules + targeted sensitive directives
-    let systemInstruction = SYSTEM_PROMPT + `
-EXTREMELY IMPORTANT ADDITIONAL CHECKS:
-- POST vs PATCH Mismatch: If this is a frontend file doing fetch('/api/foo', { method: 'POST' }), but the related backend route uses router.patch('/foo'), flag it as a BUG!
-- String vs ObjectId: If this is a Mongoose query like Model.findOne({ _id, requestedBy: userId }) and userId is a String, it will fail if the schema defines requestedBy as ObjectId. You MUST use new mongoose.Types.ObjectId(userId).
-- ReDoS: new RegExp(query, 'i') WITHOUT escaping special characters is a security vulnerability (ReDoS).
-- Increment Side-Effects: filesReviewedCount++ in a math calculation or assignment evaluates to the old value, not the incremented value. Use ++filesReviewedCount or do it on a separate line.
-- Missing Tenant Isolation: Mongoose queries/aggregations on multi-tenant models (UsageRecord, Subscription, Organization) that lack tenant ID ($match without organizationId) leak data.
-- Timestamp Units: Date.now() is milliseconds (13 digits); Unix timestamps from JWT or APIs are seconds (10 digits). Direct comparisons fail.
-- String Addition in Math: String concatenated with a number (e.g. exp + gracePeriod where gracePeriod is "60") produces string "170000000060".
-`;
-
-    if (options?.isSecuritySensitive) {
-      systemInstruction += `
-SECURITY AUDIT DIRECTIVES (OWASP & Auth Scrutiny):
-- JWT Misconfigurations: algorithms array allowing 'none', missing expiration checks, or bypassing auth middleware.
-- NoSQL Injection: Check for unsanitized user input in query operators ($where, $regex).
-- Cookie & Session Security: Check for missing httpOnly, secure, sameSite flags, and mismatched set/clear cookie paths.
-- Path Traversal: Check for user-controlled file paths without sanitization (e.g. ../../).
-- Timing Attacks: Check for plain string === comparisons on tokens/secrets instead of crypto.timingSafeEqual.
-- Mass Assignment: Check for unvalidated req.body passed directly to Model.create or findOneAndUpdate.
-`;
-    }
-
-    if (options?.isConcurrencySensitive) {
-      systemInstruction += `
-CONCURRENCY & STATE HAZARD DIRECTIVES (Distributed & Memory Scrutiny):
-- In-Memory Maps & Caches: Unbounded Map/Set instances without periodic TTL expiration timers cause memory leaks.
-- Mutation During Iteration: Mutating a Map/Array while iterating over it (e.g. deleting keys during for...of or in invalidateTags) leads to skipped entries or double counting.
-- Timer Mismatch: Mixing clearInterval with setTimeout or clearTimeout with setInterval.
-- Lock Leases: Comparing lock expiration in seconds with Date.now() in milliseconds.
-- Promise.race Orphans: Background tasks continuing to run and deleting shared tracking entries prematurely after timeout rejections.
-`;
-    }
-
     let rawResponse = '';
     let lastError: unknown = null;
 
@@ -216,7 +175,16 @@ CONCURRENCY & STATE HAZARD DIRECTIVES (Distributed & Memory Scrutiny):
           const apiCall = ai.models.generateContent({
             model,
             config: {
-              systemInstruction,
+              systemInstruction: SYSTEM_PROMPT + `
+EXTREMELY IMPORTANT ADDITIONAL CHECKS:
+- POST vs PATCH Mismatch: If this is a frontend file doing fetch('/api/foo', { method: 'POST' }), but the related backend route uses router.patch('/foo'), flag it as a BUG!
+- String vs ObjectId: If this is a Mongoose query like Model.findOne({ _id, requestedBy: userId }) and userId is a String, it will fail if the schema defines requestedBy as ObjectId. You MUST use new mongoose.Types.ObjectId(userId).
+- ReDoS: new RegExp(query, 'i') WITHOUT escaping special characters is a security vulnerability (ReDoS).
+- Increment Side-Effects: filesReviewedCount++ in a math calculation or assignment evaluates to the old value, not the incremented value. Use ++filesReviewedCount or do it on a separate line.
+- Missing Tenant Isolation: Mongoose queries/aggregations on multi-tenant models (UsageRecord, Subscription, Organization) that lack tenant ID ($match without organizationId) leak data.
+- Timestamp Units: Date.now() is milliseconds (13 digits); Unix timestamps from JWT or APIs are seconds (10 digits). Direct comparisons fail.
+- String Addition in Math: String concatenated with a number (e.g. exp + gracePeriod where gracePeriod is "60") produces string "170000000060".
+`,
               temperature: 0.1,
               maxOutputTokens: 8192,
               responseMimeType: 'application/json',
