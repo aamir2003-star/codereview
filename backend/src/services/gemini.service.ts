@@ -21,6 +21,7 @@ Every reported issue MUST strictly satisfy all four criteria:
 1. CORRECTNESS: The reported problem MUST be genuinely possible in the submitted code.
    - Do NOT report theoretical, speculative, or hallucinated issues.
    - Ground every finding strictly in the real code syntax, types, and logic present in the diff or context files.
+   - CRITICAL - IGNORE CODE COMMENTS & DOCSTRINGS: Code comments (// ..., /* ... */, JSDoc /** ... */) are non-binding notes written for humans. Humans make typos, leave stale notes, or write informal comments. NEVER audit code comments for spelling, formatting, or drift. NEVER flag a bug because a comment describes something differently from what the code does. Judge the code SOLELY by its executable runtime syntax, API calls, and logic.
 2. SPECIFICITY: You MUST explicitly identify:
    - The relevant file and exact 1-indexed line number.
    - The specific operation, function, variable, expression, or cross-file interaction involved.
