@@ -14,40 +14,75 @@ export interface AuthenticatedSocket extends Socket {
 // Track connected users per review room: Map<reviewId, Set<username>>
 const roomPresence = new Map<string, Map<string, { userId: string; username: string; avatarUrl?: string }>>();
 
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  const items = cookieHeader.split(';');
+  for (const item of items) {
+    const idx = item.indexOf('=');
+    if (idx !== -1) {
+      const key = item.substring(0, idx).trim();
+      let val = item.substring(idx + 1).trim();
+      if (val.startsWith('"') && val.endsWith('"')) {
+        val = val.slice(1, -1);
+      }
+      try {
+        cookies[key] = decodeURIComponent(val);
+      } catch {
+        cookies[key] = val;
+      }
+    }
+  }
+  return cookies;
+}
+
 export function setupReviewSockets(io: Server): void {
   // Socket.io Auth Middleware
   io.use((socket: AuthenticatedSocket, next) => {
-    let token =
+    const cookies = parseCookies(socket.handshake.headers.cookie);
+    const cookieToken = cookies.auth_token;
+
+    const authToken =
       socket.handshake.auth?.token && socket.handshake.auth.token !== 'cookie-session'
-        ? socket.handshake.auth.token
-        : socket.handshake.headers.authorization?.startsWith('Bearer ')
-        ? socket.handshake.headers.authorization.split(' ')[1]
+        ? String(socket.handshake.auth.token)
         : null;
 
-    // If no explicit token provided, extract auth_token from HttpOnly cookie
-    if (!token && socket.handshake.headers.cookie) {
-      const match = socket.handshake.headers.cookie
-        .split(';')
-        .map((c) => c.trim())
-        .find((c) => c.startsWith('auth_token='));
-      if (match) {
-        token = decodeURIComponent(match.split('=')[1]);
-      }
-    }
+    const headerToken = socket.handshake.headers.authorization?.startsWith('Bearer ')
+      ? socket.handshake.headers.authorization.split(' ')[1]
+      : null;
 
-    if (!token) {
+    // Check candidate tokens in priority order:
+    // 1. HttpOnly Cookie (secure browser session)
+    // 2. Auth payload
+    // 3. Authorization header
+    const candidates = [cookieToken, authToken, headerToken].filter(Boolean) as string[];
+
+    if (candidates.length === 0) {
       console.warn(`[Socket.io] Auth rejected: No token found for socket ${socket.id}`);
       return next(new Error('Authentication error: No token provided'));
     }
 
-    try {
-      const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
-      socket.data.user = decoded;
-      next();
-    } catch (err) {
-      console.warn(`[Socket.io] Auth rejected: Invalid JWT for socket ${socket.id}:`, err instanceof Error ? err.message : err);
-      next(new Error('Authentication error: Invalid token'));
+    let verifiedUser: JwtPayload | null = null;
+    let lastError: Error | null = null;
+
+    for (const cand of candidates) {
+      const cleanToken = cand.replace(/^"|"$/g, '').replace(/^Bearer\s+/i, '').trim();
+      try {
+        const decoded = jwt.verify(cleanToken, config.jwtSecret) as JwtPayload;
+        verifiedUser = decoded;
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
     }
+
+    if (!verifiedUser) {
+      console.warn(`[Socket.io] Auth rejected: Invalid JWT for socket ${socket.id}:`, lastError?.message);
+      return next(new Error('Authentication error: Invalid token'));
+    }
+
+    socket.data.user = verifiedUser;
+    next();
   });
 
   io.on('connection', (socket: AuthenticatedSocket) => {
@@ -69,7 +104,7 @@ export function setupReviewSockets(io: Server): void {
         return;
       }
 
-      const review = await Review.findOne({ _id: reviewId, requestedBy: user.userId }).select('_id').lean();
+      const review = await Review.findOne({ _id: reviewId, requestedBy: new mongoose.Types.ObjectId(user.userId) }).select('_id').lean();
       if (!review) {
         socket.emit('join:error', { error: 'Not authorized for this review' });
         return;

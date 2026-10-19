@@ -4,6 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import { config } from './config/env';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
@@ -13,6 +14,36 @@ import commentRoutes from './routes/comment.routes';
 import prExportRoutes from './routes/pr-export.routes';
 
 const app = express();
+
+// Rate limiting: Global protection against scraping and API abuse
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this IP, please try again later.' },
+});
+
+// Stricter rate limiting for expensive AI review triggers
+const reviewLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Review request limit reached. Please wait a few minutes before starting another review.' },
+});
+
+// Stricter rate limiting for OAuth & session routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later.' },
+});
+
+// Apply global rate limiter
+app.use(globalLimiter);
 
 // Enable Gzip/Brotli response compression for all API payloads (diffs, reviews, comment lists)
 app.use(compression());
@@ -47,7 +78,8 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(null, true); // Permissive in dev to never block localhost calls
+      // In production, reject unapproved origins
+      return callback(new Error('Origin not allowed by CORS policy'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -69,9 +101,9 @@ app.use(express.json({ limit: '1mb' }));
 
 // Routes
 app.use('/', healthRoutes);
-app.use('/auth', authRoutes);
+app.use('/auth', authLimiter, authRoutes);
 app.use('/repos', repoRoutes);
-app.use('/review', reviewRoutes);
+app.use('/review', reviewLimiter, reviewRoutes);
 app.use('/comments', commentRoutes);
 app.use('/export', prExportRoutes);
 

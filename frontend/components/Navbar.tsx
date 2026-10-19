@@ -27,13 +27,7 @@ export function Navbar() {
           </Link>
         </div>
 
-        {/* Center / Status Indicator */}
-        <div className="hidden md:flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-white shadow-[0_0_6px_#ffffff]" />
-          <span className="font-mono text-xs text-[#a1a1aa]">
-            AI Code Review Engine
-          </span>
-        </div>
+
 
         {/* Right: Actions */}
         <div className="flex items-center gap-3">

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Comment } from '../models/Comment';
 import { Review } from '../models/Review';
 
@@ -18,9 +19,25 @@ export class PrExportService {
   /**
    * Generates a complete PR audit export report and metrics.
    */
-  async generateAuditReport(repoName: string, prNumber: number): Promise<AuditReportData> {
-    const review = await Review.findOne({ repo: repoName, prNumber });
-    const comments = review ? await Comment.find({ reviewId: review._id }) : [];
+  async generateAuditReport(repoName: string, prNumber: number, userId?: string): Promise<AuditReportData> {
+    let owner: string | undefined;
+    let repo = repoName;
+    if (repoName.includes('/')) {
+      const parts = repoName.split('/');
+      owner = parts[0];
+      repo = parts[1];
+    }
+
+    const query: Record<string, any> = { repo, pullNumber: prNumber };
+    if (owner) query.owner = owner;
+    if (userId) query.requestedBy = new mongoose.Types.ObjectId(userId);
+
+    const review = await Review.findOne(query);
+    if (!review) {
+      throw new Error(`Review not found for repository "${repoName}" PR #${prNumber}`);
+    }
+
+    const comments = await Comment.find({ reviewId: review._id });
 
     let securityCount = 0;
     let bugCount = 0;

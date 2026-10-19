@@ -1,4 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { prExportService } from '../services/pr-export.service';
 
 /**
@@ -51,17 +52,18 @@ export class PrExportController {
    * GET /export/report?repo=owner/repo&pr=123
    * Export Markdown / JSON security & quality audit report.
    */
-  async exportReport(req: Request, res: Response, next?: NextFunction): Promise<void> {
+  async exportReport(req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> {
     try {
       const repo = req.query.repo as string;
       const prNumber = parseInt(req.query.pr as string, 10);
+      const userId = req.user?.userId;
 
       if (!repo || isNaN(prNumber)) {
         res.status(400).json({ error: 'Missing required query parameters: repo and pr' });
         return;
       }
 
-      const report = await prExportService.generateAuditReport(repo, prNumber);
+      const report = await prExportService.generateAuditReport(repo, prNumber, userId);
 
       const format = (req.query.format as string) || 'json';
       if (format === 'markdown') {
@@ -74,8 +76,13 @@ export class PrExportController {
       res.status(200).json({ success: true, report });
     } catch (error) {
       console.error('[PrExportController.exportReport] Error:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to generate audit report';
+      if (msg.toLowerCase().includes('not found')) {
+        res.status(404).json({ error: msg });
+        return;
+      }
       if (next) next(error);
-      else res.status(500).json({ error: 'Failed to generate audit report' });
+      else res.status(500).json({ error: msg });
     }
   }
 
@@ -83,9 +90,10 @@ export class PrExportController {
    * POST /export/webhook
    * Dispatch audit results to validated public webhook URL.
    */
-  async dispatchWebhook(req: Request, res: Response, next?: NextFunction): Promise<void> {
+  async dispatchWebhook(req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> {
     try {
       const { targetWebhookUrl, repo, prNumber } = req.body;
+      const userId = req.user?.userId;
 
       if (!targetWebhookUrl || !repo || !prNumber) {
         res.status(400).json({ error: 'targetWebhookUrl, repo, and prNumber are required' });
@@ -100,7 +108,7 @@ export class PrExportController {
         return;
       }
 
-      const report = await prExportService.generateAuditReport(repo, Number(prNumber));
+      const report = await prExportService.generateAuditReport(repo, Number(prNumber), userId);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -124,10 +132,16 @@ export class PrExportController {
       });
     } catch (error) {
       console.error('[PrExportController.dispatchWebhook] Error:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to dispatch webhook';
+      if (msg.toLowerCase().includes('not found')) {
+        res.status(404).json({ error: msg });
+        return;
+      }
       if (next) next(error);
-      else res.status(500).json({ error: 'Failed to dispatch webhook' });
+      else res.status(500).json({ error: msg });
     }
   }
 }
 
 export const prExportController = new PrExportController();
+

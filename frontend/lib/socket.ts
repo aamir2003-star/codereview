@@ -6,7 +6,9 @@ let socketInstance: Socket | null = null;
 
 export function getSocket(token?: string | null): Socket {
   const realToken = token && token !== 'cookie-session' ? token : undefined;
-  if (!socketInstance || (realToken && socketInstance.auth && (socketInstance.auth as { token?: string }).token !== realToken)) {
+  const currentToken = (socketInstance?.auth as { token?: string } | undefined)?.token;
+
+  if (!socketInstance || currentToken !== realToken) {
     if (socketInstance) {
       socketInstance.disconnect();
     }
@@ -19,6 +21,10 @@ export function getSocket(token?: string | null): Socket {
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
+  }
+
+  if (socketInstance.disconnected) {
+    socketInstance.connect();
   }
 
   return socketInstance;

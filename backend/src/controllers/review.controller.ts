@@ -296,8 +296,10 @@ export const reviewController = {
       return;
     }
 
-    // Check if a review already exists for this PR
-    let review = await Review.findOne({ owner, repo, pullNumber });
+    const userObjectId = new mongoose.Types.ObjectId(req.user.userId);
+
+    // Check if a review already exists for this PR for this user
+    let review = await Review.findOne({ owner, repo, pullNumber, requestedBy: userObjectId });
 
     if (review) {
       // Re-run requested: clear old comments and architecture summary so fresh comprehensive review runs
@@ -315,7 +317,7 @@ export const reviewController = {
         repo,
         pullNumber,
         prTitle: prTitle || `PR #${pullNumber}`,
-        requestedBy: new mongoose.Types.ObjectId(req.user.userId),
+        requestedBy: userObjectId,
         status: 'pending',
       });
     }
@@ -925,26 +927,33 @@ export const reviewController = {
    */
   async stopReview(req: AuthenticatedRequest, res: Response): Promise<void> {
     const reviewId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user?.userId;
 
-    if (!reviewId || !mongoose.isValidObjectId(reviewId)) {
-      res.status(400).json({ error: 'Valid review ID is required' });
+    if (!reviewId || !mongoose.isValidObjectId(reviewId) || !userId) {
+      res.status(400).json({ error: 'Valid review ID and authentication required' });
       return;
     }
 
     try {
-      activeReviewAborts.set(reviewId, true);
+      const review = await Review.findOne({
+        _id: reviewId,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      });
 
-      const review = await Review.findByIdAndUpdate(
-        reviewId,
-        { status: 'done' },
-        { new: true }
-      );
+      if (!review) {
+        res.status(404).json({ error: 'Review not found or unauthorized' });
+        return;
+      }
+
+      activeReviewAborts.set(reviewId, true);
+      review.status = 'done';
+      await review.save();
 
       const io = getIO();
       io?.to(`review:${reviewId}`).emit('review:complete', {
         reviewId,
-        totalComments: review?.totalComments || 0,
-        filesReviewed: review?.filesReviewed || 0,
+        totalComments: review.totalComments || 0,
+        filesReviewed: review.filesReviewed || 0,
         stopped: true,
       });
 
@@ -961,14 +970,19 @@ export const reviewController = {
    */
   async getReview(req: AuthenticatedRequest, res: Response): Promise<void> {
     const reviewId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user?.userId;
 
-    if (!reviewId || !mongoose.isValidObjectId(reviewId)) {
-      res.status(400).json({ error: 'Valid review ID is required' });
+    if (!reviewId || !mongoose.isValidObjectId(reviewId) || !userId) {
+      res.status(400).json({ error: 'Valid review ID and authentication required' });
       return;
     }
 
     try {
-      const review = await Review.findById(reviewId).lean();
+      const review = await Review.findOne({
+        _id: reviewId,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      }).lean();
+
       if (!review) {
         res.status(404).json({ error: 'Review not found' });
         return;
@@ -991,14 +1005,20 @@ export const reviewController = {
     const repo = Array.isArray(req.params.repo) ? req.params.repo[0] : req.params.repo;
     const pullNumberStr = Array.isArray(req.params.pullNumber) ? req.params.pullNumber[0] : req.params.pullNumber;
     const pullNumber = parseInt(pullNumberStr || '', 10);
+    const userId = req.user?.userId;
 
-    if (!owner || !repo || isNaN(pullNumber)) {
-      res.status(400).json({ error: 'Valid owner, repo, and pullNumber are required' });
+    if (!owner || !repo || isNaN(pullNumber) || !userId) {
+      res.status(400).json({ error: 'Valid owner, repo, pullNumber, and authentication are required' });
       return;
     }
 
     try {
-      const review = await Review.findOne({ owner, repo, pullNumber })
+      const review = await Review.findOne({
+        owner,
+        repo,
+        pullNumber,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      })
         .sort({ createdAt: -1 })
         .lean();
 
@@ -1021,9 +1041,10 @@ export const reviewController = {
    */
   async resolveComment(req: AuthenticatedRequest, res: Response): Promise<void> {
     const commentId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const userId = req.user?.userId;
 
-    if (!commentId || !mongoose.isValidObjectId(commentId)) {
-      res.status(400).json({ error: 'Valid comment ID is required' });
+    if (!commentId || !mongoose.isValidObjectId(commentId) || !userId) {
+      res.status(400).json({ error: 'Valid comment ID and authentication required' });
       return;
     }
 
@@ -1034,8 +1055,18 @@ export const reviewController = {
         return;
       }
 
+      const review = await Review.findOne({
+        _id: comment.reviewId,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      });
+
+      if (!review) {
+        res.status(404).json({ error: 'Associated review not found or unauthorized' });
+        return;
+      }
+
       comment.resolved = !comment.resolved;
-      comment.resolvedBy = comment.resolved && req.user ? new mongoose.Types.ObjectId(req.user.userId) : undefined;
+      comment.resolvedBy = comment.resolved ? new mongoose.Types.ObjectId(userId) : undefined;
       await comment.save();
 
       const io = getIO();
@@ -1069,6 +1100,16 @@ export const reviewController = {
       const comment = await Comment.findById(commentId);
       if (!comment) {
         res.status(404).json({ error: 'Comment not found' });
+        return;
+      }
+
+      const review = await Review.findOne({
+        _id: comment.reviewId,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      });
+
+      if (!review) {
+        res.status(404).json({ error: 'Associated review not found or unauthorized' });
         return;
       }
 
@@ -1111,9 +1152,12 @@ export const reviewController = {
     }
 
     try {
-      const review = await Review.findById(reviewId);
+      const review = await Review.findOne({
+        _id: reviewId,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      });
       if (!review) {
-        res.status(404).json({ error: 'Review not found' });
+        res.status(404).json({ error: 'Review not found or unauthorized' });
         return;
       }
 
@@ -1267,9 +1311,12 @@ export const reviewController = {
         return;
       }
 
-      const review = await Review.findById(comment.reviewId);
+      const review = await Review.findOne({
+        _id: comment.reviewId,
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      });
       if (!review) {
-        res.status(404).json({ error: 'Associated review not found' });
+        res.status(404).json({ error: 'Associated review not found or unauthorized' });
         return;
       }
 

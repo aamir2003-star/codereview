@@ -25,14 +25,12 @@ import {
   upvoteComment,
   stopReview,
 } from '@/lib/review-api';
-import { ReviewSummaryCard } from '@/components/dashboard/ReviewSummaryCard';
 import { LivingCyberCanvas } from '@/components/dashboard/LivingCyberCanvas';
 import { LuxuryPreloader } from '@/components/ui/LuxuryPreloader';
-import { Button } from '@/components/ui/button';
-import { AlertCircle, LogOut } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { user, token, isLoading: authLoading, logout } = useAuth();
+  const { user, token, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
   const [repos, setRepos] = useState<Repository[]>([]);
@@ -301,23 +299,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Right side: Telemetry badge + Logout button */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="hidden sm:flex items-center gap-2 border border-[#262626] bg-[#141414] px-3 py-1.5 rounded-lg text-xs">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
-                <span className="font-mono text-xs text-[#a1a1aa]">
-                  Gemini Flash Matrix
-                </span>
-              </div>
-
-              <button
-                onClick={logout}
-                className="h-8 px-3.5 rounded-lg border border-[#3a3a3a] hover:border-white bg-[#18181b] hover:bg-[#27272a] text-[#d4d4d8] hover:text-white text-xs font-medium transition-all cursor-pointer flex items-center gap-2"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span>Log out</span>
-              </button>
-            </div>
           </div>
         </div>
 
@@ -334,14 +315,6 @@ export default function DashboardPage() {
             />
           </div>
           <div className="md:col-span-7 lg:col-span-8 space-y-6">
-            {selectedRepo && (
-              <ReviewSummaryCard
-                repoName={selectedRepo.full_name}
-                totalPRs={pullRequests.length}
-                unresolvedCount={reviewComments.filter((c) => !c.resolved).length}
-                notice="AI review engine is active. Select any pull request to inspect diff and stream review comments."
-              />
-            )}
             <PrList
               repo={selectedRepo}
               pullRequests={pullRequests}

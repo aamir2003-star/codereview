@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Use webpack instead of Turbopack to avoid CSS processing panics in Next.js 16
+  // Disable Turbopack to force webpack, avoiding CSS processing panics in Next.js 16
+  // experimental: {
+  //   turbopack: false
+  // }
+  // Using undefined turbopack disables it without experimental
   turbopack: undefined,
 };
 

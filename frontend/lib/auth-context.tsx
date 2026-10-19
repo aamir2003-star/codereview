@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await http.get<{ user: User }>('/auth/me', { headers });
 
       setUser(response.data.user);
-      setToken(authToken || 'cookie-session');
+      setToken('cookie-session');
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token');
       }
@@ -74,9 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Check session on mount via HttpOnly cookie (or legacy localStorage token if one exists)
-    const legacyToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    fetchUser(legacyToken || undefined);
+    // Purge any legacy localStorage token to prevent stale token pollution
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+    }
+    fetchUser();
   }, [fetchUser]);
 
   const login = useCallback(() => {
