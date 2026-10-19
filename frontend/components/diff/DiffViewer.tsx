@@ -170,9 +170,9 @@ function CommentCardInline({
       {/* Message */}
       <div className="flex items-start gap-2.5 my-2">
         <Icon className="h-4 w-4 shrink-0 mt-0.5" />
-        <p className="text-xs sm:text-sm text-[#d4d4d4] leading-relaxed flex-1 font-sans">
+        <div className="text-xs sm:text-sm text-[#d4d4d4] leading-relaxed flex-1 font-sans whitespace-pre-line">
           {comment.message}
-        </p>
+        </div>
       </div>
 
       {/* Suggested Code Fix rendered in VS Code Editor Theme */}

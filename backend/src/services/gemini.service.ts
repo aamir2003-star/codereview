@@ -26,15 +26,21 @@ Every reported issue MUST strictly satisfy all four criteria:
    - The specific operation, function, variable, expression, or cross-file interaction involved.
 3. IMPACT: You MUST explain specifically WHAT CAN ACTUALLY GO WRONG in production.
    - Never vaguely state "this code is unsafe", "bad practice", or "may cause issues".
-   - State the concrete failure mechanism: e.g. "throws an unhandled CastError resulting in an HTTP 500 response", "causes silent query mismatches returning null", "leads to unbounded heap memory leak as expired cache entries accumulate indefinitely", "allows cross-tenant data corruption by updating subscriptions across tenant boundaries", or "causes 405 Method Not Allowed due to POST vs PATCH mismatch".
+   - State the concrete failure sequence and real-world impact (e.g. "checkQuota() can read an outdated usage value from MongoDB and pause before updating the cache. Meanwhile, trackReviewUsage() can increment the usage record and delete the cache entry. The first request can then write its previously read value back into the cache, leaving stale or even zero usage available to subsequent quota checks. If this happens, the application may incorrectly allow reviews after the organization's quota has been reached.").
 4. ACTIONABILITY: A developer MUST be able to understand the problem and fix it directly from the comment WITHOUT needing an AI patch.
-   - Clearly articulate the architectural/code remedy and why it fixes the root cause.
+   - Conclude with a clear conceptual and architectural remedy explaining what needs to be changed.
 
-STRUCTURE FOR EVERY "message" VALUE:
-Format each comment's message with a clear, self-contained explanation:
-- [Problem & Specificity]: Describe the exact operation, function/variable name, and code flaw on this line.
-- [Concrete Impact]: Explain what actually fails or breaks at runtime with the exact error, crash, silent defect, data leak, or exploit scenario.
-- [Actionable Remedy]: Explain the conceptual fix so the developer can resolve it immediately without consulting external tools.
+FORMAT FOR EVERY "message" VALUE:
+Do NOT output rigid bracket tags like "[Problem]" or "[Impact]". Instead, write a natural, clean, well-formatted report structured as follows:
+
+<Title line: Short, technical summary of the flaw>
+
+<Step-by-step narrative: Explain what can go wrong by naming the exact functions, variables, database operations, or interactions. Walk through the runtime sequence and explain what actually fails or breaks in production, concluding with the clear conceptual remedy.>
+
+EXAMPLE:
+"Stale cache repopulation after invalidation
+
+checkQuota() can read an outdated usage value from MongoDB and pause before updating the cache. Meanwhile, trackReviewUsage() can increment the usage record and delete the cache entry. The first request can then write its previously read value back into the cache, leaving stale or even zero usage available to subsequent quota checks. If this happens, the application may incorrectly allow reviews after the organization's quota has been reached. To fix this, use an atomic cache update with versioning or acquire a cache lease before repopulating."
 `;
 
 const SYSTEM_PROMPT = `You are a world-class principal code reviewer, security auditor, and performance architect (similar to CodeRabbit and GitHub Copilot).
@@ -80,7 +86,7 @@ You MUST respond strictly with a valid JSON array of objects:
   {
     "line": 15,
     "severity": "bug",
-    "message": "[Problem & Specificity] Array.prototype.forEach does not await async callbacks when updating user reviews. [Concrete Impact] The outer function returns immediately before the database updates finish, leading to unhandled promise rejections and missing review metrics in production. [Actionable Remedy] Replace forEach with Promise.all(items.map(async ...)) or a standard for...of loop so all asynchronous operations are fully awaited.",
+    "message": "Unawaited async callback in Array.prototype.forEach\n\nArray.prototype.forEach() does not await async callbacks when updating user reviews. The enclosing function returns immediately before the database updates finish, leading to unhandled promise rejections and missing review metrics in production. Replace forEach with Promise.all(items.map(async ...)) or a standard for...of loop so all asynchronous operations are fully awaited.",
     "suggestedFix": "const metrics = await Promise.all(Object.entries(byUser).map(async ([userId, userReviews]) => { ... }));"
   }
 ]
@@ -508,7 +514,7 @@ Respond STRICTLY with a valid JSON array of objects:
     "file": "${files[0]?.filename || ''}",
     "line": 25,
     "severity": "bug",
-    "message": "[Problem & Specificity] Cross-file type mismatch between controller and model. [Concrete Impact] Query fails silently returning null. [Actionable Remedy] Cast to ObjectId before querying.",
+    "message": "Type mismatch across controller and database model\n\nOrganization.findById() in the controller receives a raw string orgId, but the model schema defines _id as a BSON ObjectId. Passing an invalid 24-character string causes Mongoose to throw an unhandled CastError 500 instead of a handled 404 response. Validate the parameter using mongoose.Types.ObjectId.isValid(orgId) or cast it safely before querying.",
     "suggestedFix": "..."
   }
 ]
@@ -911,7 +917,7 @@ Respond strictly with a valid JSON array of objects:
   {
     "line": 15,
     "severity": "bug",
-    "message": "[Problem & Specificity] In-memory map l1Cache lacks TTL cleanup. [Concrete Impact] Memory leaks under high request volume causing Node.js process out-of-memory crash. [Actionable Remedy] Add a periodic setInterval eviction pass or bounded LRU policy.",
+    "message": "Stale cache repopulation after invalidation\n\ncheckQuota() can read an outdated usage value from MongoDB and pause before updating the cache. Meanwhile, trackReviewUsage() can increment the usage record and delete the cache entry. The first request can then write its previously read value back into the cache, leaving stale or even zero usage available to subsequent quota checks. If this happens, the application may incorrectly allow reviews after the organization's quota has been reached. Use an atomic check-and-set or lease token before repopulating the cache.",
     "suggestedFix": "..."
   }
 ]
