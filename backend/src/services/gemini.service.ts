@@ -634,7 +634,7 @@ You are given ALL files changed in a Pull Request, PLUS key reference files from
 CROSS-FILE CHECKS:
 1. HTTP Method Mismatches: Frontend API calls use one HTTP method (e.g. POST) but the backend route expects a different one (e.g. PATCH). Compare the fetch/axios calls in frontend files against the Express router method (router.get, router.post, router.patch, etc.) in the route definition files. This causes 404/405 errors at runtime.
 2. Type Mismatches Across Boundaries: A controller passes a string where a Mongoose model schema expects ObjectId, or vice versa. Compare the controller's query filter fields against the model schema field types. The query silently returns null/empty.
-3. Route Path Mismatches: Frontend calls /api/foo but backend registers /api/bar.
+3. Route Path Mismatches: An actual frontend API call (fetch, axios, or SDK request in code) calls /api/foo, but the backend route registers /api/bar. (CRITICAL: Do NOT flag JSDoc comments or documentation strings as route path mismatches if no executable code in the PR actually calls the wrong path).
 4. Schema Changes Breaking Queries: A model index or field was changed, but existing queries in controllers still use the old field names or assumptions.
 5. Cookie/Session Path Inconsistencies: setCookie in one file uses path '/a/b' but clearCookie in another file uses path '/a'.
 6. Event/Message Contract Mismatches: Socket.io emit in backend uses event name 'x' but frontend listens for 'y', or payload shapes differ.
