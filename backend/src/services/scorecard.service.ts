@@ -207,26 +207,35 @@ export class ScorecardService {
    */
   async recordAuditEvent(params: {
     action: AuditAction;
-    userId: string;
+    userId: mongoose.Types.ObjectId | string;
     owner: string;
     repo: string;
     pullNumber: number;
-    reviewId?: string;
+    reviewId?: mongoose.Types.ObjectId | string;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     try {
-      if (!mongoose.Types.ObjectId.isValid(params.userId)) {
+      const userObjectId =
+        params.userId instanceof mongoose.Types.ObjectId
+          ? params.userId
+          : typeof params.userId === 'string' && mongoose.Types.ObjectId.isValid(params.userId)
+          ? new mongoose.Types.ObjectId(params.userId)
+          : null;
+
+      if (!userObjectId) {
         return;
       }
 
       const reviewObjectId =
-        params.reviewId && mongoose.Types.ObjectId.isValid(params.reviewId)
+        params.reviewId instanceof mongoose.Types.ObjectId
+          ? params.reviewId
+          : typeof params.reviewId === 'string' && mongoose.Types.ObjectId.isValid(params.reviewId)
           ? new mongoose.Types.ObjectId(params.reviewId)
           : undefined;
 
       await AuditLog.create({
         action: params.action,
-        userId: new mongoose.Types.ObjectId(params.userId),
+        userId: userObjectId,
         reviewId: reviewObjectId,
         owner: params.owner,
         repo: params.repo,

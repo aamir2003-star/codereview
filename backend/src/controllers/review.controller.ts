@@ -341,11 +341,11 @@ export const reviewController = {
         // Record audit event asynchronously
         scorecardService.recordAuditEvent({
           action: 'review_triggered',
-          userId: req.user!.userId,
+          userId: new mongoose.Types.ObjectId(req.user!.userId),
           owner,
           repo,
           pullNumber,
-          reviewId,
+          reviewId: review._id,
         }).catch(() => {});
 
         const files = await githubService.getPullRequestFiles(accessToken, owner, repo, pullNumber);
@@ -888,11 +888,11 @@ export const reviewController = {
         // Record audit event asynchronously
         scorecardService.recordAuditEvent({
           action: 'review_completed',
-          userId: req.user!.userId,
+          userId: new mongoose.Types.ObjectId(req.user!.userId),
           owner,
           repo,
           pullNumber,
-          reviewId,
+          reviewId: review._id,
           metadata: {
             durationSeconds: parseFloat(durationSec),
             totalComments,

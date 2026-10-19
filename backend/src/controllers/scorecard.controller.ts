@@ -110,11 +110,11 @@ export const scorecardController = {
     try {
       await scorecardService.recordAuditEvent({
         action,
-        userId: req.user.userId,
+        userId: new mongoose.Types.ObjectId(req.user.userId),
         owner,
         repo,
         pullNumber,
-        reviewId: typeof reviewId === 'string' ? reviewId : undefined,
+        reviewId: typeof reviewId === 'string' && mongoose.Types.ObjectId.isValid(reviewId) ? new mongoose.Types.ObjectId(reviewId) : undefined,
         metadata: typeof metadata === 'object' && metadata !== null ? metadata : undefined,
       });
 
