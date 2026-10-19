@@ -3,11 +3,14 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IUser extends Document {
   githubId: string;
   username: string;
+  email?: string;
   avatarUrl: string;
   accessToken: string; // Encrypted
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type IUserDocument = IUser;
 
 const UserSchema = new Schema<IUser>(
   {
