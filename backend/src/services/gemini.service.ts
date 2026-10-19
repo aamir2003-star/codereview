@@ -15,6 +15,28 @@ export class GeminiApiError extends Error {
   }
 }
 
+export const REVIEW_QUALITY_PILLARS = `
+MANDATORY QUALITY CRITERIA FOR EVERY REPORTED ISSUE (THE FOUR PILLARS):
+Every reported issue MUST strictly satisfy all four criteria:
+1. CORRECTNESS: The reported problem MUST be genuinely possible in the submitted code.
+   - Do NOT report theoretical, speculative, or hallucinated issues.
+   - Ground every finding strictly in the real code syntax, types, and logic present in the diff or context files.
+2. SPECIFICITY: You MUST explicitly identify:
+   - The relevant file and exact 1-indexed line number.
+   - The specific operation, function, variable, expression, or cross-file interaction involved.
+3. IMPACT: You MUST explain specifically WHAT CAN ACTUALLY GO WRONG in production.
+   - Never vaguely state "this code is unsafe", "bad practice", or "may cause issues".
+   - State the concrete failure mechanism: e.g. "throws an unhandled CastError resulting in an HTTP 500 response", "causes silent query mismatches returning null", "leads to unbounded heap memory leak as expired cache entries accumulate indefinitely", "allows cross-tenant data corruption by updating subscriptions across tenant boundaries", or "causes 405 Method Not Allowed due to POST vs PATCH mismatch".
+4. ACTIONABILITY: A developer MUST be able to understand the problem and fix it directly from the comment WITHOUT needing an AI patch.
+   - Clearly articulate the architectural/code remedy and why it fixes the root cause.
+
+STRUCTURE FOR EVERY "message" VALUE:
+Format each comment's message with a clear, self-contained explanation:
+- [Problem & Specificity]: Describe the exact operation, function/variable name, and code flaw on this line.
+- [Concrete Impact]: Explain what actually fails or breaks at runtime with the exact error, crash, silent defect, data leak, or exploit scenario.
+- [Actionable Remedy]: Explain the conceptual fix so the developer can resolve it immediately without consulting external tools.
+`;
+
 const SYSTEM_PROMPT = `You are a world-class principal code reviewer, security auditor, and performance architect (similar to CodeRabbit and GitHub Copilot).
 Your mission is to perform a rigorous line-by-line inspection of the provided file diff.
 
@@ -45,10 +67,12 @@ AUDIT CHECKLIST TO ACTIVELY INSPECT:
 24. React 19 State Dependency Loops: In useEffect, updating state with a new object/array reference ([...prev, ...newItems]) where that state or a derived value is in a child component's dependency array creates an infinite render cascade.
 25. Docker Volume Shadowing Build Artifacts: In docker-compose.yml, mounting the local host directory (./backend:/app) over /app where /app/dist was built obliterates the compiled dist output.
 
+` + REVIEW_QUALITY_PILLARS + `
+
 For EACH issue or improvement found:
 - "line": The exact 1-indexed line number in the new file (+) where the issue or code is located.
 - "severity": "bug" (logic/runtime error) | "security" (vulnerability/data leak) | "smell" (bad practice/anti-pattern) | "nit" (minor style/convention).
-- "message": A clear explanation describing WHAT the flaw is and WHY it causes a failure, race condition, data corruption, or security risk.
+- "message": A complete, structured explanation satisfying Correctness, Specificity, Impact, and Actionability.
 - "suggestedFix": A concrete, ready-to-commit code snippet that completely fixes the issue.
 
 You MUST respond strictly with a valid JSON array of objects:
@@ -56,7 +80,7 @@ You MUST respond strictly with a valid JSON array of objects:
   {
     "line": 15,
     "severity": "bug",
-    "message": "Array.prototype.forEach does not await async callbacks. The function returns before asynchronous operations complete.",
+    "message": "[Problem & Specificity] Array.prototype.forEach does not await async callbacks when updating user reviews. [Concrete Impact] The outer function returns immediately before the database updates finish, leading to unhandled promise rejections and missing review metrics in production. [Actionable Remedy] Replace forEach with Promise.all(items.map(async ...)) or a standard for...of loop so all asynchronous operations are fully awaited.",
     "suggestedFix": "const metrics = await Promise.all(Object.entries(byUser).map(async ([userId, userReviews]) => { ... }));"
   }
 ]
@@ -469,11 +493,13 @@ FOCUS AUDIT CHECKS FOR SUBSYSTEM "${clusterName}":
    - In-Memory Cache & State Mutations: Unbounded Map objects without TTL cleanup loops. Mutating arrays/maps during iteration (e.g. in cache invalidation loops) causing skipped entries or double counting.
    - Lock & Timer Unit Mismatches: Comparing seconds (Unix timestamp, 10 digits) with milliseconds (Date.now(), 13 digits). Mixing clearInterval with setTimeout.
 
+` + REVIEW_QUALITY_PILLARS + `
+
 For EACH issue found:
 - "file": The exact file path among the reviewed files where the defect or symptom is located (e.g. "${files[0]?.filename || ''}").
 - "line": The 1-indexed line number in that file where the issue occurs.
 - "severity": "bug" | "security" | "smell"
-- "message": A clear explanation specifying both files and what goes wrong (e.g. "Cross-file contract mismatch between [FileA] and [FileB]: ...").
+- "message": A structured explanation specifying both files, the exact contract mismatch, concrete runtime impact, and actionable remedy.
 - "suggestedFix": Concrete replacement code.
 
 Respond STRICTLY with a valid JSON array of objects:
@@ -482,7 +508,7 @@ Respond STRICTLY with a valid JSON array of objects:
     "file": "${files[0]?.filename || ''}",
     "line": 25,
     "severity": "bug",
-    "message": "...",
+    "message": "[Problem & Specificity] Cross-file type mismatch between controller and model. [Concrete Impact] Query fails silently returning null. [Actionable Remedy] Cast to ObjectId before querying.",
     "suggestedFix": "..."
   }
 ]
@@ -609,11 +635,13 @@ CROSS-FILE CHECKS:
 7. Shared State Assumptions: One file assumes a variable is a number, another treats it as a string.
 8. Import/Export Mismatches: A function signature changed in the source file but callers still use the old signature.
 
+` + REVIEW_QUALITY_PILLARS + `
+
 For EACH cross-file issue found:
 - "file": The exact file path among the changed files where the symptom or fix belongs (e.g. "${files[0]?.filename || ''}").
 - "line": The line number in that file where the SYMPTOM appears (the consuming/calling side).
 - "severity": "bug" | "security" | "smell"
-- "message": Explain BOTH files involved: "In [fileA] line X, ... but in [fileB] line Y, ... This causes ..."
+- "message": A structured explanation specifying both files involved (e.g. "In [fileA] line X, ... but in [fileB] line Y, ..."), concrete runtime impact, and actionable remedy.
 - "suggestedFix": The code fix for the file containing the bug.
 
 Respond with a valid JSON array. If no cross-file issues found, respond with [].
@@ -745,10 +773,12 @@ MANDATORY SECURITY CHECKS (OWASP Top 10 + Node.js specifics):
 11. Timing Attacks: Using === to compare secrets/tokens instead of crypto.timingSafeEqual.
 12. Rate Limiting Gaps: Auth endpoints without rate limiting enabling brute force.
 
+` + REVIEW_QUALITY_PILLARS + `
+
 For EACH security issue found:
 - "line": Line number where the vulnerability exists.
 - "severity": "security" (for actual vulnerabilities) | "bug" (for auth logic errors).
-- "message": Describe the vulnerability, attack vector, and potential impact.
+- "message": A structured explanation detailing the exact flaw, attack vector, concrete exploit impact, and actionable architectural remedy.
 - "suggestedFix": A production-ready fix.
 
 Respond with a valid JSON array. If no security issues, respond with [].
@@ -868,10 +898,12 @@ MANDATORY CONCURRENCY AUDIT CHECKS:
 8. Non-Atomic Read-Modify-Write:
    - Check-then-act patterns on shared resources without mutexes or atomic operations, allowing concurrent requests to overwrite state.
 
+` + REVIEW_QUALITY_PILLARS + `
+
 For EACH issue found:
 - "line": The 1-indexed line number in the diff where the hazard exists.
 - "severity": "bug" | "security" | "smell"
-- "message": Clear description of the concurrency flaw, race condition, or memory leak.
+- "message": A structured explanation detailing the exact concurrency hazard, concrete failure mode (race condition, memory leak, unhandled rejection), and actionable remedy.
 - "suggestedFix": Concrete code fix.
 
 Respond strictly with a valid JSON array of objects:
@@ -879,7 +911,7 @@ Respond strictly with a valid JSON array of objects:
   {
     "line": 15,
     "severity": "bug",
-    "message": "...",
+    "message": "[Problem & Specificity] In-memory map l1Cache lacks TTL cleanup. [Concrete Impact] Memory leaks under high request volume causing Node.js process out-of-memory crash. [Actionable Remedy] Add a periodic setInterval eviction pass or bounded LRU policy.",
     "suggestedFix": "..."
   }
 ]
