@@ -62,8 +62,16 @@ export interface ReviewWithComments {
   comments: PersistedComment[];
 }
 
+function buildAuthHeaders(token?: string, extraHeaders?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  if (token && token !== 'cookie-session') {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export async function triggerReview(
-  token: string,
+  token: string | null | undefined,
   payload: {
     owner: string;
     repo: string;
@@ -74,11 +82,11 @@ export async function triggerReview(
 ): Promise<{ reviewId: string; status: string }> {
   const res = await fetch(`${API_URL}/review`, {
     method: 'POST',
-    headers: {
+    headers: buildAuthHeaders(token || undefined, {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    }),
     body: JSON.stringify(payload),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -91,9 +99,10 @@ export async function triggerReview(
   return res.json();
 }
 
-export async function fetchReview(token: string, reviewId: string): Promise<ReviewWithComments> {
+export async function fetchReview(token: string | null | undefined, reviewId: string): Promise<ReviewWithComments> {
   const res = await fetch(`${API_URL}/review/${reviewId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -106,10 +115,11 @@ export async function fetchReview(token: string, reviewId: string): Promise<Revi
   return res.json();
 }
 
-export async function stopReview(token: string, reviewId: string): Promise<{ success: boolean; review: PersistedReview }> {
+export async function stopReview(token: string | null | undefined, reviewId: string): Promise<{ success: boolean; review: PersistedReview }> {
   const res = await fetch(`${API_URL}/review/${reviewId}/stop`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -123,13 +133,14 @@ export async function stopReview(token: string, reviewId: string): Promise<{ suc
 }
 
 export async function fetchReviewByPr(
-  token: string,
+  token: string | null | undefined,
   owner: string,
   repo: string,
   pullNumber: number
 ): Promise<ReviewWithComments> {
   const res = await fetch(`${API_URL}/review/pr/${owner}/${repo}/${pullNumber}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -143,12 +154,13 @@ export async function fetchReviewByPr(
 }
 
 export async function resolveComment(
-  token: string,
+  token: string | null | undefined,
   commentId: string
 ): Promise<{ comment: PersistedComment }> {
   const res = await fetch(`${API_URL}/comments/${commentId}/resolve`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -162,12 +174,13 @@ export async function resolveComment(
 }
 
 export async function upvoteComment(
-  token: string,
+  token: string | null | undefined,
   commentId: string
 ): Promise<{ comment: PersistedComment; upvotes: number }> {
   const res = await fetch(`${API_URL}/comments/${commentId}/upvote`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -181,12 +194,13 @@ export async function upvoteComment(
 }
 
 export async function publishReviewToGithub(
-  token: string,
+  token: string | null | undefined,
   reviewId: string
 ): Promise<{ success: boolean; published: boolean; githubReviewUrl: string; commentsCount: number }> {
   const res = await fetch(`${API_URL}/review/${reviewId}/publish-github`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -200,12 +214,13 @@ export async function publishReviewToGithub(
 }
 
 export async function publishSingleCommentToGithub(
-  token: string,
+  token: string | null | undefined,
   commentId: string
 ): Promise<{ success: boolean; comment: PersistedComment; githubCommentUrl: string }> {
   const res = await fetch(`${API_URL}/comments/${commentId}/publish-github`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: buildAuthHeaders(token || undefined),
+    credentials: 'include',
     cache: 'no-store',
   });
 

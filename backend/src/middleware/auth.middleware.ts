@@ -17,16 +17,19 @@ export const requireAuth = (
   res: Response,
   next: NextFunction
 ): void => {
-  const authHeader = req.headers.authorization;
+  let token: string | undefined;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Authentication required. No token provided.' });
-    return;
+  // 1. Check HttpOnly cookie first (secure browser session)
+  if (req.cookies && typeof req.cookies.auth_token === 'string') {
+    token = req.cookies.auth_token;
+  }
+  // 2. Check Authorization: Bearer <token> header (API clients, scripts, tests)
+  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
-  const token = authHeader.split(' ')[1];
   if (!token) {
-    res.status(401).json({ error: 'Authentication required. Invalid token format.' });
+    res.status(401).json({ error: 'Authentication required. No token provided.' });
     return;
   }
 

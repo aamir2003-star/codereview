@@ -17,11 +17,22 @@ const roomPresence = new Map<string, Map<string, { userId: string; username: str
 export function setupReviewSockets(io: Server): void {
   // Socket.io Auth Middleware
   io.use((socket: AuthenticatedSocket, next) => {
-    const token =
+    let token =
       socket.handshake.auth?.token ||
       (socket.handshake.headers.authorization?.startsWith('Bearer ')
         ? socket.handshake.headers.authorization.split(' ')[1]
         : null);
+
+    // If no explicit token provided, extract auth_token from HttpOnly cookie
+    if (!token && socket.handshake.headers.cookie) {
+      const match = socket.handshake.headers.cookie
+        .split(';')
+        .map((c) => c.trim())
+        .find((c) => c.startsWith('auth_token='));
+      if (match) {
+        token = decodeURIComponent(match.split('=')[1]);
+      }
+    }
 
     if (!token) {
       return next(new Error('Authentication error: No token provided'));

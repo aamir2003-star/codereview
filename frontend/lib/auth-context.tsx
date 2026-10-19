@@ -18,7 +18,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: () => void;
   logout: () => void;
-  setAuthToken: (token: string) => Promise<boolean>;
+  setAuthToken: (token?: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,8 +28,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
 /**
  * Global session-expired handler.
  * Any module (api.ts, review-api.ts, etc.) can call this when it receives a 401.
- * It clears the stale token, disconnects the socket, and redirects to /login
- * so the user never sees a stale "logged-in" UI with a dead session.
+ * It clears client-side state, disconnects the socket, and redirects to /login.
  */
 let _sessionExpiredFlag = false;
 export function handleSessionExpired() {
@@ -52,22 +51,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const router = useRouter();
 
-  const fetchUser = useCallback(async (authToken: string): Promise<boolean> => {
+  const fetchUser = useCallback(async (authToken?: string): Promise<boolean> => {
     try {
+      const headers: Record<string, string> = {
+        'Cache-Control': 'no-cache',
+      };
+      if (authToken && authToken !== 'cookie-session') {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+
       const response = await fetch(`${API_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          'Cache-Control': 'no-cache',
-        },
+        headers,
+        credentials: 'include',
         cache: 'no-store',
       });
 
       if (response.ok) {
         const data = await response.json();
         setUser(data.user);
-        setToken(authToken);
+        setToken(authToken || 'cookie-session');
+        // Clean up legacy localStorage token if present
         if (typeof window !== 'undefined') {
-          localStorage.setItem('auth_token', authToken);
+          localStorage.removeItem('auth_token');
         }
         _sessionExpiredFlag = false;
         return true;
@@ -99,12 +104,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const savedToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    if (savedToken) {
-      fetchUser(savedToken);
-    } else {
-      setIsLoading(false);
-    }
+    // Check session on mount via HttpOnly cookie (or legacy localStorage token if one exists)
+    const legacyToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    fetchUser(legacyToken || undefined);
   }, [fetchUser]);
 
   const login = useCallback(() => {
@@ -113,8 +115,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     disconnectSocket();
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (err) {
+      console.warn('Failed to call backend logout:', err);
+    }
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
       sessionStorage.clear();
@@ -124,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/login');
   }, [router]);
 
-  const setAuthToken = useCallback(async (newToken: string): Promise<boolean> => {
+  const setAuthToken = useCallback(async (newToken?: string): Promise<boolean> => {
     setIsLoading(true);
     return await fetchUser(newToken);
   }, [fetchUser]);

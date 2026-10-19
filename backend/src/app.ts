@@ -1,6 +1,7 @@
 import express from 'express';
 import compression from 'compression';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from './config/env';
@@ -64,6 +65,7 @@ app.use((_req, res, next) => {
 });
 
 app.use(morgan('dev'));
+app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 
 // Routes

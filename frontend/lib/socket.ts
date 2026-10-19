@@ -12,6 +12,7 @@ export function getSocket(token?: string): Socket {
 
     socketInstance = io(SOCKET_URL, {
       auth: { token },
+      withCredentials: true,
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
