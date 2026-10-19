@@ -13,7 +13,7 @@ router.post('/audit', scorecardController.logAuditEvent);
 // Get audit event history for a PR (specific multi-segment route)
 router.get('/audit/:owner/:repo/:pullNumber', scorecardController.getAuditHistory);
 
-// Get calculated quality scorecard for a specific review (parameterized route)
-router.get('/:reviewId', scorecardController.getScorecard);
+// Get calculated quality scorecard for a specific review
+router.get('/review/:reviewId', scorecardController.getScorecard);
 
 export default router;
