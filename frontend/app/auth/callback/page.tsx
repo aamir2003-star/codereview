@@ -35,7 +35,14 @@ function CallbackHandler() {
         }
       });
     } else {
-      router.push('/login');
+      // Check if session cookie is already active
+      setAuthToken().then((success) => {
+        if (success) {
+          setAuthenticated(true);
+        } else {
+          router.push('/login');
+        }
+      });
     }
   }, [searchParams, router, setAuthToken]);
 

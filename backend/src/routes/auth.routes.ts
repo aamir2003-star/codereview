@@ -10,5 +10,6 @@ router.get('/github/callback', authController.handleCallback);
 
 // Protected routes
 router.get('/me', requireAuth, authController.getMe);
+router.post('/logout', authController.logout);
 
 export default router;

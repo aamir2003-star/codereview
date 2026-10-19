@@ -90,13 +90,35 @@ export const authController = {
 
       const token = jwt.sign(payload, config.jwtSecret, { expiresIn: '7d' });
 
-      // 6. Redirect to frontend with token
-      res.redirect(`${config.clientUrl}/auth/callback?token=${encodeURIComponent(token)}`);
+      // 6. Set secure HttpOnly cookie
+      res.cookie('auth_token', token, {
+        httpOnly: true,
+        secure: config.nodeEnv === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/',
+      });
+
+      // 7. Redirect cleanly to dashboard without exposing token in URL query
+      res.redirect(`${config.clientUrl}/dashboard`);
     } catch (err) {
       console.error('[OAuth Callback Exception]:', err);
       const message = err instanceof Error ? err.message : 'Failed to authenticate with GitHub';
       res.redirect(`${config.clientUrl}/login?error=${encodeURIComponent(message)}`);
     }
+  },
+
+  /**
+   * Log out user by clearing the HttpOnly auth cookie
+   */
+  logout(_req: Request, res: Response): void {
+    res.clearCookie('auth_token', {
+      httpOnly: true,
+      secure: config.nodeEnv === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+    res.status(200).json({ message: 'Logged out successfully' });
   },
 
   /**

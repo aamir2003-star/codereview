@@ -63,11 +63,18 @@ export interface PrDiffResponse {
   files: FileDiff[];
 }
 
-export async function fetchRepos(token: string): Promise<Repository[]> {
+function buildAuthHeaders(token?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (token && token !== 'cookie-session') {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function fetchRepos(token?: string): Promise<Repository[]> {
   const res = await fetch(`${API_URL}/repos`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: buildAuthHeaders(token),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -82,14 +89,14 @@ export async function fetchRepos(token: string): Promise<Repository[]> {
 }
 
 export async function fetchPullRequests(
-  token: string,
-  owner: string,
-  repo: string
+  token?: string,
+  owner?: string,
+  repo?: string
 ): Promise<PullRequest[]> {
+  if (!owner || !repo) return [];
   const res = await fetch(`${API_URL}/repos/${owner}/${repo}/prs`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: buildAuthHeaders(token),
+    credentials: 'include',
     cache: 'no-store',
   });
 
@@ -104,15 +111,14 @@ export async function fetchPullRequests(
 }
 
 export async function fetchPullRequestDiff(
-  token: string,
+  token: string | undefined,
   owner: string,
   repo: string,
   pullNumber: number
 ): Promise<PrDiffResponse> {
   const res = await fetch(`${API_URL}/repos/${owner}/${repo}/prs/${pullNumber}/diff`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: buildAuthHeaders(token),
+    credentials: 'include',
     cache: 'no-store',
   });
 
