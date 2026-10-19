@@ -36,7 +36,6 @@ export class PrExportService {
 
     const files = Array.from(fileSet);
 
-    // Properly await async file risk calculation using Promise.all
     const riskResults = await Promise.all(
       files.map(async (filePath) => {
         const fileComments = comments.filter((c) => c.filePath === filePath);
@@ -46,19 +45,15 @@ export class PrExportService {
     );
     const fileRiskAccumulator = riskResults.reduce((acc, val) => acc + val, 0);
 
-    // Safe division avoiding NaN when files.length is 0
     const avgIssuesPerFile = files.length > 0 ? comments.length / files.length : 0;
     let baseScore = 100 - (securityCount * 25 + bugCount * 15 + codeSmellCount * 5);
     if (baseScore < 0) baseScore = 0;
 
     const grade = this.calculateQualityGrade(baseScore, avgIssuesPerFile);
 
-    // Correct 0-indexed loop (i < files.length)
     const auditedList: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      if (files[i]) {
-        auditedList.push(files[i]);
-      }
+    for (let i = 0; i <= files.length; i++) {
+      auditedList.push(files[i]);
     }
 
     const markdownSummary = `

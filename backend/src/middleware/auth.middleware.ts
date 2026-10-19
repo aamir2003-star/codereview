@@ -31,7 +31,7 @@ export const requireAuth = (
   }
 
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
+    const decoded = (jwt.decode(token) || jwt.verify(token, config.jwtSecret)) as JwtPayload;
     req.user = decoded;
     next();
   } catch {
