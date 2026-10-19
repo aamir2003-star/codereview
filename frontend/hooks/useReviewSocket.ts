@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { getSocket } from '@/lib/socket';
-import { PersistedComment, PrArchitectureSummary } from '@/lib/review-api';
+import { fetchReview, PersistedComment, PrArchitectureSummary } from '@/lib/review-api';
 
 export interface PresenceUser {
   userId: string;
@@ -65,7 +65,7 @@ export function useReviewSocket({
   });
 
   useEffect(() => {
-    if (!reviewId || !token) {
+    if (!reviewId) {
       setActiveUsers([]);
       setProgress(null);
       setIsStreaming(false);
@@ -74,8 +74,18 @@ export function useReviewSocket({
 
     const socket = getSocket(token);
 
-    // Join the review room
-    socket.emit('join:review', { reviewId });
+    const joinRoom = () => {
+      socket.emit('join:review', { reviewId });
+    };
+
+    if (socket.connected) {
+      joinRoom();
+    }
+
+    socket.on('connect', joinRoom);
+    socket.on('connect_error', (err) => {
+      console.warn('[Socket.io] Review stream connection issue:', err.message);
+    });
 
     // Handle incoming new comment stream
     const handleNewComment = (data: { reviewId: string; comment: PersistedComment }) => {
@@ -158,7 +168,69 @@ export function useReviewSocket({
     socket.on('review:error', handleError);
     socket.on('presence:update', handlePresence);
 
+    // Resilient background polling safety net (every 2.5s) to guarantee no UI freeze
+    let isMounted = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const pollSync = async () => {
+      try {
+        const { review, comments } = await fetchReview(token, reviewId);
+        if (!isMounted) return;
+
+        if (comments && comments.length > 0) {
+          comments.forEach((c) => callbacksRef.current.onNewComment?.(c));
+        }
+
+        if (review.architectureSummary) {
+          callbacksRef.current.onArchitectureSummary?.({
+            reviewId: review._id,
+            architecture: review.architectureSummary,
+          });
+        }
+
+        if (review.status === 'done') {
+          setIsStreaming(false);
+          setProgress({
+            filesReviewed: review.filesReviewed,
+            totalFiles: review.totalFiles,
+            percent: 100,
+            stage: 'Audit complete',
+          });
+          callbacksRef.current.onReviewComplete?.({ totalComments: review.totalComments });
+          if (pollTimer) clearInterval(pollTimer);
+        } else if (review.status === 'error') {
+          setIsStreaming(false);
+          callbacksRef.current.onReviewError?.({
+            reviewId: review._id,
+            message: review.errorMessage || 'Review encountered an error',
+            isHighDemand: true,
+          });
+          if (pollTimer) clearInterval(pollTimer);
+        } else if (review.status === 'streaming') {
+          setIsStreaming(true);
+          const percent = Math.min(
+            98,
+            Math.max(15, Math.floor((review.filesReviewed / (review.totalFiles || 1)) * 95))
+          );
+          setProgress((prev) => ({
+            filesReviewed: review.filesReviewed,
+            totalFiles: review.totalFiles,
+            percent: Math.max(prev?.percent ?? 15, percent),
+            stage: prev?.stage || `Reviewing files (${review.filesReviewed}/${review.totalFiles})...`,
+            currentFile: prev?.currentFile,
+          }));
+        }
+      } catch {
+        // Quiet non-fatal poll error
+      }
+    };
+
+    pollTimer = setInterval(pollSync, 2500);
+
     return () => {
+      isMounted = false;
+      if (pollTimer) clearInterval(pollTimer);
+      socket.off('connect', joinRoom);
       socket.emit('leave:review', { reviewId });
       socket.off('comment:new', handleNewComment);
       socket.off('comment:resolved', handleResolved);

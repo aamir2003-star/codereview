@@ -4,18 +4,19 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5001'
 
 let socketInstance: Socket | null = null;
 
-export function getSocket(token?: string): Socket {
-  if (!socketInstance || (token && socketInstance.auth && (socketInstance.auth as { token: string }).token !== token)) {
+export function getSocket(token?: string | null): Socket {
+  const realToken = token && token !== 'cookie-session' ? token : undefined;
+  if (!socketInstance || (realToken && socketInstance.auth && (socketInstance.auth as { token?: string }).token !== realToken)) {
     if (socketInstance) {
       socketInstance.disconnect();
     }
 
     socketInstance = io(SOCKET_URL, {
-      auth: { token },
+      auth: realToken ? { token: realToken } : {},
       withCredentials: true,
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
   }

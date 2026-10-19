@@ -18,10 +18,11 @@ export function setupReviewSockets(io: Server): void {
   // Socket.io Auth Middleware
   io.use((socket: AuthenticatedSocket, next) => {
     let token =
-      socket.handshake.auth?.token ||
-      (socket.handshake.headers.authorization?.startsWith('Bearer ')
+      socket.handshake.auth?.token && socket.handshake.auth.token !== 'cookie-session'
+        ? socket.handshake.auth.token
+        : socket.handshake.headers.authorization?.startsWith('Bearer ')
         ? socket.handshake.headers.authorization.split(' ')[1]
-        : null);
+        : null;
 
     // If no explicit token provided, extract auth_token from HttpOnly cookie
     if (!token && socket.handshake.headers.cookie) {
@@ -35,6 +36,7 @@ export function setupReviewSockets(io: Server): void {
     }
 
     if (!token) {
+      console.warn(`[Socket.io] Auth rejected: No token found for socket ${socket.id}`);
       return next(new Error('Authentication error: No token provided'));
     }
 
@@ -42,7 +44,8 @@ export function setupReviewSockets(io: Server): void {
       const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
       socket.data.user = decoded;
       next();
-    } catch {
+    } catch (err) {
+      console.warn(`[Socket.io] Auth rejected: Invalid JWT for socket ${socket.id}:`, err instanceof Error ? err.message : err);
       next(new Error('Authentication error: Invalid token'));
     }
   });
