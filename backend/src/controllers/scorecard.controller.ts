@@ -6,7 +6,7 @@ import { AuditAction } from '../models/AuditLog';
 
 export const scorecardController = {
   /**
-   * GET /scorecard/:reviewId
+   * GET /scorecard/review/:reviewId
    * Computes and returns the comprehensive quality scorecard for a review.
    */
   async getScorecard(req: AuthenticatedRequest, res: Response): Promise<void> {
