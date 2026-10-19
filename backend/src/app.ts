@@ -10,6 +10,16 @@ import repoRoutes from './routes/repo.routes';
 import reviewRoutes from './routes/review.routes';
 import commentRoutes from './routes/comment.routes';
 import prExportRoutes from './routes/pr-export.routes';
+import orgRoutes from './routes/org.routes';
+import teamRoutes from './routes/team.routes';
+import auditRoutes from './routes/audit.routes';
+import policyRoutes from './routes/policy.routes';
+import queueRoutes from './routes/queue.routes';
+import notificationRoutes from './routes/notification.routes';
+import webhookRoutes from './routes/webhook.routes';
+import billingRoutes from './routes/billing.routes';
+import uploadRoutes from './routes/upload.routes';
+import { rateLimiter } from './middleware/rate-limiter.middleware';
 
 const app = express();
 
@@ -72,6 +82,17 @@ app.use('/repos', repoRoutes);
 app.use('/review', reviewRoutes);
 app.use('/comments', commentRoutes);
 app.use('/export', prExportRoutes);
+
+// Subsystem API Routes
+app.use('/api/orgs', orgRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/policies', policyRoutes);
+app.use('/api/queues', queueRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/webhooks', webhookRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/upload', rateLimiter({ maxRequests: 50 }), uploadRoutes);
 
 // Global error handler
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
