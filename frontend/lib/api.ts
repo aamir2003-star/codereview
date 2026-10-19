@@ -1,6 +1,4 @@
-import { handleSessionExpired } from '@/lib/auth-context';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { http, authHeader } from '@/lib/http';
 
 export interface Repository {
   id: number;
@@ -63,28 +61,10 @@ export interface PrDiffResponse {
   files: FileDiff[];
 }
 
-function buildAuthHeaders(token?: string): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (token && token !== 'cookie-session') {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
-
 export async function fetchRepos(token?: string): Promise<Repository[]> {
-  const res = await fetch(`${API_URL}/repos`, {
-    headers: buildAuthHeaders(token),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.get<{ repos: Repository[] }>('/repos', {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to fetch repositories');
-  }
-
-  const data = await res.json();
   return data.repos;
 }
 
@@ -94,19 +74,9 @@ export async function fetchPullRequests(
   repo?: string
 ): Promise<PullRequest[]> {
   if (!owner || !repo) return [];
-  const res = await fetch(`${API_URL}/repos/${owner}/${repo}/prs`, {
-    headers: buildAuthHeaders(token),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.get<{ prs: PullRequest[] }>(`/repos/${owner}/${repo}/prs`, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to fetch pull requests');
-  }
-
-  const data = await res.json();
   return data.prs;
 }
 
@@ -116,17 +86,8 @@ export async function fetchPullRequestDiff(
   repo: string,
   pullNumber: number
 ): Promise<PrDiffResponse> {
-  const res = await fetch(`${API_URL}/repos/${owner}/${repo}/prs/${pullNumber}/diff`, {
-    headers: buildAuthHeaders(token),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.get<PrDiffResponse>(`/repos/${owner}/${repo}/prs/${pullNumber}/diff`, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to fetch pull request diff');
-  }
-
-  return await res.json();
+  return data;
 }

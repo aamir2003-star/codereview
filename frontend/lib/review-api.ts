@@ -1,6 +1,4 @@
-import { handleSessionExpired } from '@/lib/auth-context';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+import { http, authHeader } from '@/lib/http';
 
 export type Severity = 'bug' | 'security' | 'smell' | 'nit';
 export type ReviewStatus = 'pending' | 'streaming' | 'done' | 'error';
@@ -62,14 +60,6 @@ export interface ReviewWithComments {
   comments: PersistedComment[];
 }
 
-function buildAuthHeaders(token?: string, extraHeaders?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { ...extraHeaders };
-  if (token && token !== 'cookie-session') {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
-
 export async function triggerReview(
   token: string | null | undefined,
   payload: {
@@ -80,56 +70,24 @@ export async function triggerReview(
     prTitle: string;
   }
 ): Promise<{ reviewId: string; status: string }> {
-  const res = await fetch(`${API_URL}/review`, {
-    method: 'POST',
-    headers: buildAuthHeaders(token || undefined, {
-      'Content-Type': 'application/json',
-    }),
-    body: JSON.stringify(payload),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.post<{ reviewId: string; status: string }>('/review', payload, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to trigger review');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function fetchReview(token: string | null | undefined, reviewId: string): Promise<ReviewWithComments> {
-  const res = await fetch(`${API_URL}/review/${reviewId}`, {
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.get<ReviewWithComments>(`/review/${reviewId}`, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to fetch review');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function stopReview(token: string | null | undefined, reviewId: string): Promise<{ success: boolean; review: PersistedReview }> {
-  const res = await fetch(`${API_URL}/review/${reviewId}/stop`, {
-    method: 'POST',
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.post<{ success: boolean; review: PersistedReview }>(`/review/${reviewId}/stop`, {}, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to stop review');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function fetchReviewByPr(
@@ -138,97 +96,48 @@ export async function fetchReviewByPr(
   repo: string,
   pullNumber: number
 ): Promise<ReviewWithComments> {
-  const res = await fetch(`${API_URL}/review/pr/${owner}/${repo}/${pullNumber}`, {
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.get<ReviewWithComments>(`/review/pr/${owner}/${repo}/${pullNumber}`, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'No existing review found');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function resolveComment(
   token: string | null | undefined,
   commentId: string
 ): Promise<{ comment: PersistedComment }> {
-  const res = await fetch(`${API_URL}/comments/${commentId}/resolve`, {
-    method: 'PATCH',
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.patch<{ comment: PersistedComment }>(`/comments/${commentId}/resolve`, {}, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to resolve comment');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function upvoteComment(
   token: string | null | undefined,
   commentId: string
 ): Promise<{ comment: PersistedComment; upvotes: number }> {
-  const res = await fetch(`${API_URL}/comments/${commentId}/upvote`, {
-    method: 'PATCH',
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.patch<{ comment: PersistedComment; upvotes: number }>(`/comments/${commentId}/upvote`, {}, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to upvote comment');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function publishReviewToGithub(
   token: string | null | undefined,
   reviewId: string
 ): Promise<{ success: boolean; published: boolean; githubReviewUrl: string; commentsCount: number }> {
-  const res = await fetch(`${API_URL}/review/${reviewId}/publish-github`, {
-    method: 'POST',
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.post<{ success: boolean; published: boolean; githubReviewUrl: string; commentsCount: number }>(`/review/${reviewId}/publish-github`, {}, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.details || err.error || 'Failed to publish review to GitHub');
-  }
-
-  return res.json();
+  return data;
 }
 
 export async function publishSingleCommentToGithub(
   token: string | null | undefined,
   commentId: string
 ): Promise<{ success: boolean; comment: PersistedComment; githubCommentUrl: string }> {
-  const res = await fetch(`${API_URL}/comments/${commentId}/publish-github`, {
-    method: 'POST',
-    headers: buildAuthHeaders(token || undefined),
-    credentials: 'include',
-    cache: 'no-store',
+  const { data } = await http.post<{ success: boolean; comment: PersistedComment; githubCommentUrl: string }>(`/comments/${commentId}/publish-github`, {}, {
+    headers: authHeader(token),
   });
-
-  if (!res.ok) {
-    if (res.status === 401) { handleSessionExpired(); throw new Error('Session expired'); }
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.details || err.error || 'Failed to publish comment to GitHub');
-  }
-
-  return res.json();
+  return data;
 }

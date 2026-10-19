@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { disconnectSocket } from '@/lib/socket';
+import { http } from '@/lib/http';
 
 export interface User {
   _id: string;
@@ -53,48 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUser = useCallback(async (authToken?: string): Promise<boolean> => {
     try {
-      const headers: Record<string, string> = {
-        'Cache-Control': 'no-cache',
-      };
-      if (authToken && authToken !== 'cookie-session') {
-        headers.Authorization = `Bearer ${authToken}`;
-      }
+      const headers = authToken && authToken !== 'cookie-session' ? { Authorization: `Bearer ${authToken}` } : undefined;
+      const response = await http.get<{ user: User }>('/auth/me', { headers });
 
-      const response = await fetch(`${API_URL}/auth/me`, {
-        headers,
-        credentials: 'include',
-        cache: 'no-store',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        setToken(authToken || 'cookie-session');
-        // Clean up legacy localStorage token if present
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth_token');
-        }
-        _sessionExpiredFlag = false;
-        return true;
-      } else if (response.status === 401) {
-        handleSessionExpired();
-        setUser(null);
-        setToken(null);
-        return false;
-      } else {
-        console.warn('[AuthProvider] /auth/me returned non-ok status:', response.status);
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth_token');
-        }
-        setUser(null);
-        setToken(null);
-        return false;
-      }
-    } catch (error) {
-      console.error('Error fetching user:', error);
+      setUser(response.data.user);
+      setToken(authToken || 'cookie-session');
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token');
       }
+      _sessionExpiredFlag = false;
+      return true;
+    } catch {
       setUser(null);
       setToken(null);
       return false;
@@ -118,10 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     disconnectSocket();
     try {
-      await fetch(`${API_URL}/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      await http.post('/auth/logout');
     } catch (err) {
       console.warn('Failed to call backend logout:', err);
     }
