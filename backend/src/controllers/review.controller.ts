@@ -7,6 +7,7 @@ import { Comment } from '../models/Comment';
 import { decrypt } from '../utils/crypto';
 import { githubService } from '../services/github.service';
 import { geminiService, GeminiApiError } from '../services/gemini.service';
+import { scorecardService } from '../services/scorecard.service';
 import { getIO } from '../sockets/socket.instance';
 
 async function getUserAccessToken(userId: string): Promise<string> {
@@ -336,6 +337,16 @@ export const reviewController = {
 
         await Review.findByIdAndUpdate(review._id, { status: 'streaming' });
         io?.to(`review:${reviewId}`).emit('review:status', { reviewId, status: 'streaming' });
+
+        // Record audit event asynchronously
+        scorecardService.recordAuditEvent({
+          action: 'review_triggered',
+          userId: req.user!.userId,
+          owner,
+          repo,
+          pullNumber,
+          reviewId,
+        }).catch(() => {});
 
         const files = await githubService.getPullRequestFiles(accessToken, owner, repo, pullNumber);
 
@@ -873,6 +884,21 @@ export const reviewController = {
           totalComments,
           filesReviewed: filesReviewedCount,
         });
+
+        // Record audit event asynchronously
+        scorecardService.recordAuditEvent({
+          action: 'review_completed',
+          userId: req.user!.userId,
+          owner,
+          repo,
+          pullNumber,
+          reviewId,
+          metadata: {
+            durationSeconds: parseFloat(durationSec),
+            totalComments,
+            filesReviewed: filesReviewedCount,
+          },
+        }).catch(() => {});
 
         io?.to(`review:${reviewId}`).emit('review:progress', {
           reviewId,
