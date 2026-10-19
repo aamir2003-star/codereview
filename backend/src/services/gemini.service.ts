@@ -22,6 +22,8 @@ Every reported issue MUST strictly satisfy all four criteria:
    - Do NOT report theoretical, speculative, or hallucinated issues.
    - Ground every finding strictly in the real code syntax, types, and logic present in the diff or context files.
    - CRITICAL - IGNORE CODE COMMENTS & DOCSTRINGS: Code comments (// ..., /* ... */, JSDoc /** ... */) are non-binding notes written for humans. Humans make typos, leave stale notes, or write informal comments. NEVER audit code comments for spelling, formatting, or drift. NEVER flag a bug because a comment describes something differently from what the code does. Judge the code SOLELY by its executable runtime syntax, API calls, and logic.
+   - CRITICAL - RESPECT EXPLICIT TYPE CASTS & GUARDS: If the code already casts a value (e.g. \`new mongoose.Types.ObjectId(...)\`, \`new ObjectId(...)\`, \`Number(...)\`, \`String(...)\`), or if the receiving signature/schema accepts union types (\`ObjectId | string\`), NEVER report a missing cast or type mismatch.
+   - CRITICAL - ZERO-BUG PASSING FOR CLEAN CODE: If the code is well-written, clean, and bug-free, you MUST return an empty array []. A code review that reports 0 issues on clean code is considered 100% successful. Never invent defects to demonstrate diligence.
 2. SPECIFICITY: You MUST explicitly identify:
    - The relevant file and exact 1-indexed line number.
    - The specific operation, function, variable, expression, or cross-file interaction involved.
@@ -523,10 +525,11 @@ If no defects found, return []. Do NOT include markdown formatting or prose.`;
 
     let combinedDiffs = '';
     let totalChars = 0;
-    const MAX_TOTAL_CHARS = 45000;
+    const MAX_TOTAL_CHARS = 70000;
+    const maxFileChars = files.length > 4 ? 12000 : 25000;
 
     for (const file of files) {
-      const snippet = file.patch.length > 7000 ? file.patch.slice(0, 7000) + '\n...[truncated]' : file.patch;
+      const snippet = file.patch.length > maxFileChars ? file.patch.slice(0, maxFileChars) + '\n...[truncated]' : file.patch;
       if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
       combinedDiffs += `\n### Subsystem File: ${file.filename}\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
       totalChars += snippet.length;
@@ -535,7 +538,7 @@ If no defects found, return []. Do NOT include markdown formatting or prose.`;
     if (referenceFiles && referenceFiles.length > 0) {
       combinedDiffs += '\n\n## Subsystem Reference Files:\n';
       for (const ctx of referenceFiles) {
-        const snippet = ctx.snippet.length > 2500 ? ctx.snippet.slice(0, 2500) + '\n...[truncated]' : ctx.snippet;
+        const snippet = ctx.snippet.length > 6000 ? ctx.snippet.slice(0, 6000) + '\n...[truncated]' : ctx.snippet;
         if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
         combinedDiffs += `\n### Reference: ${ctx.filename}\n\`\`\`\n${snippet}\n\`\`\`\n`;
         totalChars += snippet.length;
@@ -633,14 +636,20 @@ If no defects found, return []. Do NOT include markdown formatting or prose.`;
 You are given ALL files changed in a Pull Request, PLUS key reference files from the repository (route definitions, model schemas, middleware). Your job is to find bugs that ONLY appear when comparing files against each other — issues that are INVISIBLE when reviewing any single file in isolation.
 
 CROSS-FILE CHECKS:
-1. HTTP Method Mismatches: Frontend API calls use one HTTP method (e.g. POST) but the backend route expects a different one (e.g. PATCH). Compare the fetch/axios calls in frontend files against the Express router method (router.get, router.post, router.patch, etc.) in the route definition files. This causes 404/405 errors at runtime.
-2. Type Mismatches Across Boundaries: A controller passes a string where a Mongoose model schema expects ObjectId, or vice versa. Compare the controller's query filter fields against the model schema field types. The query silently returns null/empty.
-3. Route Path Mismatches: An actual frontend API call (fetch, axios, or SDK request in code) calls /api/foo, but the backend route registers /api/bar. (CRITICAL: Do NOT flag JSDoc comments or documentation strings as route path mismatches if no executable code in the PR actually calls the wrong path).
+1. HTTP Method Mismatches: Frontend API calls use one HTTP method (e.g. POST) but the backend route expects a different one (e.g. PATCH). Compare the actual fetch/axios calls in frontend code against the Express router method (router.get, router.post, router.patch, etc.) in the route definition files. This causes 404/405 errors at runtime.
+2. Type Mismatches Across Boundaries: A controller passes a raw un-cast string where a Mongoose model schema or query filter strictly requires an ObjectId without any casting or validation. (DO NOT report if the code already casts via new mongoose.Types.ObjectId(), new ObjectId(), or if the destination method accepts string | ObjectId).
+3. Route Path Mismatches: An actual frontend API call (fetch, axios, or SDK request in executable code) calls /api/foo, but the backend route registers /api/bar. (CRITICAL: Do NOT flag JSDoc comments, comments, or documentation strings as route path mismatches if no executable code in the PR actually calls the wrong path).
 4. Schema Changes Breaking Queries: A model index or field was changed, but existing queries in controllers still use the old field names or assumptions.
 5. Cookie/Session Path Inconsistencies: setCookie in one file uses path '/a/b' but clearCookie in another file uses path '/a'.
 6. Event/Message Contract Mismatches: Socket.io emit in backend uses event name 'x' but frontend listens for 'y', or payload shapes differ.
 7. Shared State Assumptions: One file assumes a variable is a number, another treats it as a string.
 8. Import/Export Mismatches: A function signature changed in the source file but callers still use the old signature.
+
+CRITICAL ANTI-HALLUCINATION GUARDRAILS FOR CROSS-FILE AUDITS:
+- TRUNCATION DEFENSE: If any file patch is marked with "...[truncated]", NEVER assume that methods, classes, functions, or exports defined in that file are missing. Only report a missing method/function if the full file is present and the symbol is definitively absent.
+- TYPE CONVERSIONS: If a caller wraps a parameter with \`new mongoose.Types.ObjectId(...)\` or if a service method accepts \`Types.ObjectId | string\`, DO NOT flag a type mismatch.
+- ROUTE SEPARATION: Routes with distinct prefixes (e.g., /audit/... vs /review/...) do NOT conflict. Only flag route ordering issues when an earlier wildcard parameter route (e.g. /:id) literally captures a subsequent static path (e.g. /audit).
+- HONEST REPORTING: If all files integrate cleanly and no genuine runtime defects exist, respond strictly with []. Do not manufacture defects.
 
 ` + REVIEW_QUALITY_PILLARS + `
 
@@ -658,9 +667,10 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     let combinedDiffs = '';
     let totalChars = 0;
     const MAX_TOTAL_CHARS = 120000;
+    const maxFileChars = files.length > 8 ? 15000 : 35000;
 
     for (const file of files) {
-      const snippet = file.patch.length > 4000 ? file.patch.slice(0, 4000) + '\n...[truncated]' : file.patch;
+      const snippet = file.patch.length > maxFileChars ? file.patch.slice(0, maxFileChars) + '\n...[truncated]' : file.patch;
       if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
       combinedDiffs += `\n### Changed File: ${file.filename}\n\`\`\`diff\n${snippet}\n\`\`\`\n`;
       totalChars += snippet.length;
@@ -670,7 +680,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
     if (repoContextFiles && repoContextFiles.length > 0) {
       combinedDiffs += '\n\n## Reference Files from Repository (NOT changed in PR, for cross-reference):\n';
       for (const ctx of repoContextFiles) {
-        const snippet = ctx.snippet.length > 2500 ? ctx.snippet.slice(0, 2500) + '\n...[truncated]' : ctx.snippet;
+        const snippet = ctx.snippet.length > 8000 ? ctx.snippet.slice(0, 8000) + '\n...[truncated]' : ctx.snippet;
         if (totalChars + snippet.length > MAX_TOTAL_CHARS) break;
         combinedDiffs += `\n### Reference: ${ctx.filename}\n\`\`\`\n${snippet}\n\`\`\`\n`;
         totalChars += snippet.length;
@@ -691,7 +701,7 @@ Do NOT include markdown fences or prose outside the JSON array.`;
           const apiCall = ai.models.generateContent({
             model,
             config: {
-              systemInstruction: CROSS_FILE_PROMPT + `\n\nCRITICAL CHECK: Look for POST/PATCH mismatches between fetch calls and router definitions. Look for String vs ObjectId mismatches in Mongoose queries!`,
+              systemInstruction: CROSS_FILE_PROMPT,
               temperature: 0.1,
               maxOutputTokens: 8192,
               responseMimeType: 'application/json',
