@@ -99,8 +99,8 @@ export const authController = {
         path: '/',
       });
 
-      // 7. Redirect cleanly to dashboard without exposing token in URL query
-      res.redirect(`${config.clientUrl}/dashboard`);
+      // 7. Redirect cleanly to /auth/callback to show the Preloader animation (no query token in URL!)
+      res.redirect(`${config.clientUrl}/auth/callback`);
     } catch (err) {
       console.error('[OAuth Callback Exception]:', err);
       const message = err instanceof Error ? err.message : 'Failed to authenticate with GitHub';
