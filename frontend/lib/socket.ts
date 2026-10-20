@@ -16,10 +16,13 @@ export function getSocket(token?: string | null): Socket {
     socketInstance = io(SOCKET_URL, {
       auth: realToken ? { token: realToken } : {},
       withCredentials: true,
+      transports: ['websocket'],
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 10,
+      reconnectionAttempts: 15,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
     });
   }
 

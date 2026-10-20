@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark h-full antialiased scroll-smooth">
+    <html lang="en" className="dark h-full antialiased scroll-smooth" data-scroll-behavior="smooth">
       <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100 font-sans relative overflow-x-hidden selection:bg-emerald-500/20 selection:text-emerald-300">
         <ThreeDCanvas />
         <div className="relative z-10 flex min-h-screen flex-col">

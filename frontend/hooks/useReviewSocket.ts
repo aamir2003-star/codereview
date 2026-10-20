@@ -83,8 +83,13 @@ export function useReviewSocket({
     }
 
     socket.on('connect', joinRoom);
+    let connectErrorCount = 0;
     socket.on('connect_error', (err) => {
-      console.warn('[Socket.io] Review stream connection issue:', err.message);
+      connectErrorCount++;
+      // Only log every 5th error to avoid console spam during reconnection attempts
+      if (connectErrorCount <= 2 || connectErrorCount % 5 === 0) {
+        console.warn(`[Socket.io] Review stream connection issue (attempt ${connectErrorCount}):`, err.message);
+      }
     });
 
     // Handle incoming new comment stream
@@ -168,7 +173,7 @@ export function useReviewSocket({
     socket.on('review:error', handleError);
     socket.on('presence:update', handlePresence);
 
-    // Resilient background polling safety net (every 2.5s) to guarantee no UI freeze
+    // Resilient background polling safety net to guarantee no UI freeze
     let isMounted = true;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -219,12 +224,22 @@ export function useReviewSocket({
             stage: prev?.stage || `Reviewing files (${review.filesReviewed}/${review.totalFiles})...`,
             currentFile: prev?.currentFile,
           }));
+        } else if (review.status === 'pending') {
+          setIsStreaming(true);
+          setProgress((prev) => prev ?? {
+            filesReviewed: 0,
+            totalFiles: 0,
+            percent: 5,
+            stage: 'Initializing review...',
+          });
         }
       } catch {
         // Quiet non-fatal poll error
       }
     };
 
+    // Run first poll immediately so progress appears even if socket hasn't connected yet
+    pollSync();
     pollTimer = setInterval(pollSync, 2500);
 
     return () => {

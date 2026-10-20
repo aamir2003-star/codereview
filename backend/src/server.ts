@@ -30,6 +30,10 @@ export const io = new Server(server, {
     methods: ['GET', 'POST', 'PATCH'],
     credentials: true,
   },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 30000,
+  pingInterval: 15000,
+  connectTimeout: 15000,
 });
 
 setIO(io);

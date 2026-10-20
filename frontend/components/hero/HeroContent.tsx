@@ -26,13 +26,6 @@ export function HeroContent() {
     <div className="absolute inset-0 z-10 flex flex-col justify-end pb-28 lg:justify-center lg:pb-0 pointer-events-none">
       <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-12">
         <div className="max-w-xl lg:max-w-[44%] space-y-6 pointer-events-auto">
-          {/* Pill */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/[0.04]">
-            <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
-            <span className="text-[11px] text-white/50 font-medium tracking-wide uppercase">
-              AI Code Review Engine
-            </span>
-          </div>
 
           {/* Headline */}
           <h1 className="text-[clamp(2.25rem,5.5vw,4.5rem)] font-bold text-white leading-[1.06] tracking-tight">
