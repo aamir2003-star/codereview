@@ -13,6 +13,15 @@ import { useAuth } from '@/lib/auth-context';
 export function HeroContent() {
   const { user, login } = useAuth();
 
+  const handleScrollToFeatures = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const target = document.getElementById('features');
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.history.pushState(null, '', '#features');
+    }
+  };
+
   return (
     <div className="absolute inset-0 z-10 flex flex-col justify-end pb-28 lg:justify-center lg:pb-0 pointer-events-none">
       <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-12">
@@ -58,7 +67,7 @@ export function HeroContent() {
               </button>
             )}
 
-            <a href="#features">
+            <a href="#features" onClick={handleScrollToFeatures} aria-label="See how ReviewCopilot works">
               <button className="h-11 px-6 rounded-xl border border-white/15 text-white/55 hover:text-white hover:border-white/40 text-sm font-medium transition-all cursor-pointer">
                 See How It Works
               </button>

@@ -58,7 +58,7 @@ const auditPillars = [
 
 export function FeatureScroll() {
   return (
-    <section id="features" className="py-20 md:py-28 border-t border-[#262626] bg-black relative text-white">
+    <section id="features" className="scroll-mt-14 py-20 md:py-28 border-t border-[#262626] bg-black relative text-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-16">
         {/* Top Header */}
         <div className="max-w-3xl space-y-3">
