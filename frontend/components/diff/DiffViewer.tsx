@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileDiff, PullRequest } from '@/lib/api';
 import {
@@ -36,6 +36,7 @@ import {
   Loader2,
   Send,
   CheckCheck,
+  Menu,
 } from 'lucide-react';
 import { HighTrafficModal } from '@/components/ui/HighTrafficModal';
 
@@ -115,6 +116,7 @@ function CommentCardInline({
 
   return (
     <motion.div
+      id={`comment-${comment._id}`}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
@@ -262,6 +264,58 @@ export function DiffViewer({
     currentReview?.githubReviewUrl || null
   );
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string; url?: string } | null>(null);
+  const [isMobileFileTreeOpen, setIsMobileFileTreeOpen] = useState(false);
+  const [targetScrollCommentId, setTargetScrollCommentId] = useState<string | null>(null);
+
+  // Auto-scroll to first comment or target comment when a file is opened
+  useEffect(() => {
+    if (activeTab !== 'diff' || selectedFileIndex === -1) return;
+
+    // Small delay to ensure diff lines and comment cards are rendered in DOM
+    const timer = setTimeout(() => {
+      let elementToScroll: HTMLElement | null = null;
+
+      if (targetScrollCommentId) {
+        elementToScroll = document.getElementById(`comment-${targetScrollCommentId}`);
+      }
+
+      if (!elementToScroll) {
+        // Find first comment card in current file if available
+        const currentFile = files[selectedFileIndex];
+        const firstComment = reviewComments.find((c) => c.filePath === currentFile?.filename);
+        if (firstComment) {
+          elementToScroll = document.getElementById(`comment-${firstComment._id}`);
+        }
+      }
+
+      if (elementToScroll) {
+        elementToScroll.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        // If no comment, scroll to top of diff content
+        const container = document.getElementById('diff-content-scroll-container');
+        if (container) {
+          container.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }
+      setTargetScrollCommentId(null);
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [selectedFileIndex, activeTab]);
+
+  const handleSelectFile = (idx: number) => {
+    const targetFile = files[idx];
+    const firstComment = targetFile
+      ? reviewComments.find((c) => c.filePath === targetFile.filename)
+      : null;
+    if (firstComment) {
+      setTargetScrollCommentId(firstComment._id);
+    } else {
+      setTargetScrollCommentId(null);
+    }
+    setSelectedFileIndex(idx);
+    setIsMobileFileTreeOpen(false);
+  };
 
   React.useEffect(() => {
     if (currentReview?.architectureSummary) {
@@ -395,7 +449,7 @@ export function DiffViewer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-6 text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-1.5 sm:p-6 text-white">
       <HighTrafficModal
         isOpen={!!reviewError}
         message={reviewError?.message}
@@ -407,9 +461,9 @@ export function DiffViewer({
         onClose={() => setReviewError(null)}
       />
 
-      <div className="flex flex-col h-full max-h-[94vh] w-full max-w-7xl border border-[#333333] bg-[#1e1e1e] rounded-xl shadow-2xl overflow-hidden relative">
+      <div className="flex flex-col h-[98vh] sm:h-full max-h-[98vh] sm:max-h-[94vh] w-full max-w-7xl border border-[#333333] bg-[#1e1e1e] rounded-lg sm:rounded-xl shadow-2xl overflow-hidden relative">
         {/* Top Header */}
-        <div className="border-b border-[#2d2d2d] bg-[#252526] px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="border-b border-[#2d2d2d] bg-[#252526] px-3.5 sm:px-5 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2.5">
               <span className="font-mono text-xs text-[#cccccc] bg-[#333333] px-2 py-0.5 rounded border border-[#3a3a3a]">
@@ -558,7 +612,7 @@ export function DiffViewer({
         </AnimatePresence>
 
         {/* Tab Selector */}
-        <div className="border-b border-[#2d2d2d] bg-[#252526] px-5 flex items-center gap-6">
+        <div className="border-b border-[#2d2d2d] bg-[#252526] px-3.5 sm:px-5 flex items-center gap-4 sm:gap-6 overflow-x-auto no-scrollbar shrink-0">
           <button
             onClick={() => setActiveTab('architecture')}
             className={`py-2.5 text-xs font-medium transition-all cursor-pointer relative flex items-center gap-2 ${
@@ -607,16 +661,19 @@ export function DiffViewer({
 
         {/* Tab 2: Unified Diff & Inline Audit */}
         {activeTab === 'diff' && (
-          <div className="flex flex-1 overflow-hidden">
-            {/* File Tree Sidebar */}
-            <div className="w-64 border-r border-[#2d2d2d] bg-[#252526] overflow-y-auto shrink-0 flex flex-col">
+          <div className="flex flex-1 overflow-hidden relative">
+            {/* Desktop File Tree Sidebar */}
+            <div className="hidden md:flex w-64 lg:w-72 border-r border-[#2d2d2d] bg-[#252526] overflow-y-auto shrink-0 flex-col">
               <div className="px-3 py-2 text-[11px] font-mono text-[#858585] uppercase tracking-wider border-b border-[#2d2d2d]">
                 Files Changed ({files.length})
               </div>
               <div className="p-1 space-y-0.5 flex-1 overflow-y-auto">
                 {orphanComments.length > 0 && (
                   <button
-                    onClick={() => setSelectedFileIndex(-1)}
+                    onClick={() => {
+                      setSelectedFileIndex(-1);
+                      setIsMobileFileTreeOpen(false);
+                    }}
                     className={`w-full text-left px-2.5 py-1.5 rounded text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer mb-1 ${
                       isOrphanSelected
                         ? 'bg-[#37373d] text-white font-medium border-l-2 border-[#007acc]'
@@ -643,23 +700,23 @@ export function DiffViewer({
                   return (
                     <button
                       key={file.sha || file.filename}
-                      onClick={() => setSelectedFileIndex(idx)}
+                      onClick={() => handleSelectFile(idx)}
                       className={`w-full text-left px-2.5 py-1.5 rounded text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                         isSelected
                           ? 'bg-[#37373d] text-white font-medium border-l-2 border-[#007acc]'
                           : 'text-[#cccccc] hover:bg-[#2a2d2e] hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar">
                         <FileCode className="h-3.5 w-3.5 text-[#858585] shrink-0" />
-                        <span className="truncate font-mono text-[11px]">
+                        <span className="whitespace-nowrap font-mono text-[11px]">
                           {file.filename}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
                         {fileIssuesCount > 0 && (
-                          <span className="bg-[#f85149] text-white px-1 rounded-full font-bold">
+                          <span className="bg-[#f85149] text-white px-1.5 py-0.2 rounded-full font-bold">
                             {fileIssuesCount}
                           </span>
                         )}
@@ -672,18 +729,131 @@ export function DiffViewer({
               </div>
             </div>
 
+            {/* Mobile / Tablet Drawer Backdrop */}
+            <AnimatePresence>
+              {isMobileFileTreeOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsMobileFileTreeOpen(false)}
+                  className="md:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-30"
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Mobile / Tablet File Tree Drawer */}
+            <AnimatePresence>
+              {isMobileFileTreeOpen && (
+                <motion.div
+                  initial={{ x: '-100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '-100%' }}
+                  transition={{ type: 'tween', duration: 0.25 }}
+                  className="md:hidden absolute top-0 left-0 bottom-0 w-[85%] max-w-sm bg-[#1e1e1e] border-r border-[#333333] z-40 flex flex-col shadow-2xl"
+                >
+                  <div className="p-3 border-b border-[#2d2d2d] bg-[#252526] flex items-center justify-between">
+                    <span className="font-mono text-xs text-[#cccccc] font-semibold uppercase tracking-wider">
+                      Files Changed ({files.length})
+                    </span>
+                    <button
+                      onClick={() => setIsMobileFileTreeOpen(false)}
+                      className="h-7 w-7 rounded flex items-center justify-center text-[#858585] hover:text-white hover:bg-[#333333]"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="p-2 space-y-1 flex-1 overflow-y-auto">
+                    {orphanComments.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setSelectedFileIndex(-1);
+                          setIsMobileFileTreeOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer mb-1 ${
+                          isOrphanSelected
+                            ? 'bg-[#37373d] text-white font-medium border-l-2 border-[#007acc]'
+                            : 'text-[#e3b341] hover:bg-[#2a2d2e] bg-[#2a271f]/40 border border-[#e3b341]/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Workflow className="h-4 w-4 text-[#e3b341] shrink-0" />
+                          <span className="font-mono text-xs font-semibold">
+                            Cross-File &amp; System
+                          </span>
+                        </div>
+                        <span className="bg-[#e3b341] text-black px-1.5 py-0.5 rounded-full font-bold text-[10px]">
+                          {orphanComments.length}
+                        </span>
+                      </button>
+                    )}
+
+                    {files.map((file, idx) => {
+                      const fileIssuesCount = reviewComments.filter(
+                        (c) => c.filePath === file.filename
+                      ).length;
+                      const isSelected = selectedFileIndex === idx;
+
+                      return (
+                        <button
+                          key={file.sha || file.filename}
+                          onClick={() => handleSelectFile(idx)}
+                          className={`w-full text-left px-3 py-2.5 rounded text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#37373d] text-white font-medium border-l-2 border-[#007acc]'
+                              : 'text-[#cccccc] hover:bg-[#2a2d2e] hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-x-auto">
+                            <FileCode className="h-4 w-4 text-[#858585] shrink-0" />
+                            <span className="whitespace-nowrap font-mono text-xs">
+                              {file.filename}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] pl-2">
+                            {fileIssuesCount > 0 && (
+                              <span className="bg-[#f85149] text-white px-1.5 py-0.5 rounded-full font-bold">
+                                {fileIssuesCount}
+                              </span>
+                            )}
+                            <span className="text-[#4ec9b0]">+{file.additions}</span>
+                            <span className="text-[#f85149]">-{file.deletions}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Diff Content View */}
             <div className="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e]">
               {isOrphanSelected ? (
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  <div className="border-b border-[#2d2d2d] pb-3 mb-2">
-                    <h3 className="text-sm font-semibold text-[#d4d4d4] flex items-center gap-2">
-                      <Workflow className="h-4 w-4 text-[#e3b341]" />
-                      <span>Cross-File &amp; Subsystem Integration Findings ({orphanComments.length})</span>
-                    </h3>
-                    <p className="text-xs text-[#858585] mt-1">
-                      Issues spanning multiple modules, contract mismatches between services, or system-wide architecture defects.
-                    </p>
+                <div
+                  id="diff-content-scroll-container"
+                  className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3"
+                >
+                  <div className="border-b border-[#2d2d2d] pb-3 mb-2 flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-semibold text-[#d4d4d4] flex items-center gap-2">
+                        <Workflow className="h-4 w-4 text-[#e3b341] shrink-0" />
+                        <span>Cross-File &amp; Subsystem Integration Findings ({orphanComments.length})</span>
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-[#858585] mt-1">
+                        Issues spanning multiple modules, contract mismatches between services, or system-wide architecture defects.
+                      </p>
+                    </div>
+                    {/* Mobile button to open file drawer */}
+                    <button
+                      onClick={() => setIsMobileFileTreeOpen(true)}
+                      className="md:hidden shrink-0 h-8 px-2.5 rounded border border-[#3a3a3a] bg-[#252526] text-xs font-mono flex items-center gap-1.5"
+                    >
+                      <Menu className="h-4 w-4" />
+                      <span>Files</span>
+                    </button>
                   </div>
                   {orphanComments.map((c) => (
                     <CommentCardInline
@@ -698,19 +868,31 @@ export function DiffViewer({
                   ))}
                 </div>
               ) : selectedFile ? (
-                <div className="flex-1 overflow-y-auto">
-                  {/* File Header Bar */}
-                  <div className="sticky top-0 z-10 bg-[#252526] border-b border-[#2d2d2d] px-4 py-2 flex items-center justify-between">
-                    <span className="font-mono text-xs text-[#cccccc] font-medium">
-                      {selectedFile.filename}
-                    </span>
-                    <span className="font-mono text-[11px] text-[#858585]">
+                <div
+                  id="diff-content-scroll-container"
+                  className="flex-1 overflow-y-auto"
+                >
+                  {/* File Header Bar with Hamburger for Mobile */}
+                  <div className="sticky top-0 z-10 bg-[#252526] border-b border-[#2d2d2d] px-3 sm:px-4 py-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-x-auto">
+                      <button
+                        onClick={() => setIsMobileFileTreeOpen(true)}
+                        className="md:hidden shrink-0 p-1.5 rounded hover:bg-[#333333] text-[#a1a1aa] hover:text-white"
+                        title="Toggle Files"
+                      >
+                        <Menu className="h-4 w-4" />
+                      </button>
+                      <span className="font-mono text-xs text-[#cccccc] font-medium whitespace-nowrap overflow-x-auto">
+                        {selectedFile.filename}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[11px] text-[#858585] shrink-0">
                       +{selectedFile.additions} / -{selectedFile.deletions}
                     </span>
                   </div>
 
                   {/* Diff Lines Table */}
-                  <div className="font-mono text-xs leading-5 select-text">
+                  <div className="font-mono text-xs leading-5 select-text overflow-x-auto">
                     {diffLines.map((line) => {
                       const lineComments = line.lineNum ? commentsByLine[line.lineNum] : [];
 

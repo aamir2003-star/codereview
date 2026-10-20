@@ -30,7 +30,7 @@ export function PrList({
 }: PrListProps) {
   if (!repo) {
     return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] text-center p-8 rounded-xl">
+      <div className="flex flex-col items-center justify-center min-h-[300px] md:h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] text-center p-8 rounded-xl">
         <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#262626] text-white mb-3 bg-[#141414]">
           <GitPullRequest className="h-6 w-6 text-[#a1a1aa]" />
         </div>
@@ -45,7 +45,7 @@ export function PrList({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] rounded-xl overflow-hidden text-white">
+    <div className="flex flex-col min-h-[450px] md:h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] rounded-xl overflow-hidden text-white">
       {/* Header */}
       <div className="p-4 sm:p-5 border-b border-[#262626] bg-[#141414] flex items-center justify-between">
         <div className="min-w-0">
