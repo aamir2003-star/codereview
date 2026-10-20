@@ -77,7 +77,10 @@ export default function DashboardPage() {
       .then((data) => {
         if (!mounted) return;
         setRepos(data);
-        if (data.length > 0) setSelectedRepo(data[0]);
+        // Only auto-select first repo on desktop (>= 768px). On mobile, start on the repos list.
+        if (data.length > 0 && typeof window !== 'undefined' && window.innerWidth >= 768) {
+          setSelectedRepo(data[0]);
+        }
       })
       .catch((err) => { if (mounted) setError(err.message); })
       .finally(() => { if (mounted) setLoadingRepos(false); });
