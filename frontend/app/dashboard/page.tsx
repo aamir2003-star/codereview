@@ -303,7 +303,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-          <div className="md:col-span-5 lg:col-span-4">
+          <div className={`md:col-span-5 lg:col-span-4 ${selectedRepo ? 'hidden md:block' : 'block'}`}>
             <RepoList
               repos={repos}
               selectedRepo={selectedRepo}
@@ -314,13 +314,14 @@ export default function DashboardPage() {
               isLoading={loadingRepos}
             />
           </div>
-          <div className="md:col-span-7 lg:col-span-8 space-y-6">
+          <div className={`md:col-span-7 lg:col-span-8 space-y-6 ${selectedRepo ? 'block' : 'hidden md:block'}`}>
             <PrList
               repo={selectedRepo}
               pullRequests={pullRequests}
               isLoading={loadingPrs}
               onInspectDiff={handleInspectDiff}
               onStartReview={handleInspectDiff}
+              onBack={() => setSelectedRepo(null)}
             />
           </div>
         </div>

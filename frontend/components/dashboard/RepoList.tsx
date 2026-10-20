@@ -25,7 +25,7 @@ export function RepoList({
   );
 
   return (
-    <div className="flex flex-col h-[380px] md:h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] rounded-xl overflow-hidden">
+    <div className="flex flex-col min-h-[450px] md:h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] rounded-xl overflow-hidden">
       {/* Header & Search Input */}
       <div className="p-4 border-b border-[#262626] bg-[#141414] space-y-3">
         <div className="flex items-center justify-between">

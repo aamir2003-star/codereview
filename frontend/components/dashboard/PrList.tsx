@@ -11,6 +11,7 @@ import {
   Code2,
   Sparkles,
   Inbox,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface PrListProps {
@@ -19,6 +20,7 @@ interface PrListProps {
   isLoading: boolean;
   onInspectDiff: (pr: PullRequest) => void;
   onStartReview: (pr: PullRequest) => void;
+  onBack?: () => void;
 }
 
 export function PrList({
@@ -27,6 +29,7 @@ export function PrList({
   isLoading,
   onInspectDiff,
   onStartReview,
+  onBack,
 }: PrListProps) {
   if (!repo) {
     return (
@@ -47,25 +50,36 @@ export function PrList({
   return (
     <div className="flex flex-col min-h-[450px] md:h-[calc(100vh-140px)] border border-[#262626] bg-[#0d0d0d] rounded-xl overflow-hidden text-white">
       {/* Header */}
-      <div className="p-4 sm:p-5 border-b border-[#262626] bg-[#141414] flex items-center justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm sm:text-base font-semibold text-white truncate tracking-tight">
-              {repo.full_name}
-            </h2>
-            <a
-              href={repo.html_url}
-              target="_blank"
-              rel="noreferrer"
-              title="View on GitHub"
-              className="text-[#71717a] hover:text-white transition-colors"
+      <div className="p-4 sm:p-5 border-b border-[#262626] bg-[#141414] flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="md:hidden flex items-center justify-center h-8 w-8 rounded-lg border border-[#333333] hover:border-white text-[#a1a1aa] hover:text-white bg-[#1e1e1e] transition-colors shrink-0"
+              title="Back to Repositories"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm sm:text-base font-semibold text-white truncate tracking-tight">
+                {repo.full_name}
+              </h2>
+              <a
+                href={repo.html_url}
+                target="_blank"
+                rel="noreferrer"
+                title="View on GitHub"
+                className="text-[#71717a] hover:text-white transition-colors shrink-0"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+            <p className="text-xs text-[#a1a1aa] mt-0.5 font-mono">
+              {pullRequests.length} open pull request{pullRequests.length === 1 ? '' : 's'}
+            </p>
           </div>
-          <p className="text-xs text-[#a1a1aa] mt-0.5 font-mono">
-            {pullRequests.length} open pull request{pullRequests.length === 1 ? '' : 's'}
-          </p>
         </div>
       </div>
 
