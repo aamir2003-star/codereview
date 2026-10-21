@@ -149,6 +149,20 @@ export function useReviewSocket({
       }
     };
 
+    // Handle review stopped early by user
+    const handleStopped = (data: { reviewId: string; message?: string }) => {
+      if (data.reviewId === reviewId) {
+        setIsStreaming(false);
+        setProgress((prev) => ({
+          filesReviewed: prev?.filesReviewed ?? 0,
+          totalFiles: prev?.totalFiles ?? 0,
+          percent: prev?.percent ?? 0,
+          stage: 'Review stopped',
+        }));
+        callbacksRef.current.onReviewComplete?.({ totalComments: 0 });
+      }
+    };
+
     // Handle review error (e.g. high traffic or model errors)
     const handleError = (data: { reviewId: string; message: string; isHighDemand?: boolean }) => {
       if (data.reviewId === reviewId) {
@@ -170,6 +184,7 @@ export function useReviewSocket({
     socket.on('review:architecture', handleArchitecture);
     socket.on('review:progress', handleProgress);
     socket.on('review:complete', handleComplete);
+    socket.on('review:stopped', handleStopped);
     socket.on('review:error', handleError);
     socket.on('presence:update', handlePresence);
 
@@ -253,6 +268,7 @@ export function useReviewSocket({
       socket.off('review:architecture', handleArchitecture);
       socket.off('review:progress', handleProgress);
       socket.off('review:complete', handleComplete);
+      socket.off('review:stopped', handleStopped);
       socket.off('review:error', handleError);
       socket.off('presence:update', handlePresence);
     };

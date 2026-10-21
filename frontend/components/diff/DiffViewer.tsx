@@ -38,6 +38,7 @@ import {
   Menu,
   CheckCircle2,
   ShieldCheck,
+  Minus,
 } from 'lucide-react';
 import { HighTrafficModal } from '@/components/ui/HighTrafficModal';
 
@@ -51,6 +52,7 @@ interface DiffViewerProps {
   isReviewing?: boolean;
   token: string | null;
   onClose: () => void;
+  onMinimize?: () => void;
   onStartReview: () => void;
   onStopReview?: () => void;
   onResolve?: (commentId: string) => void;
@@ -242,6 +244,7 @@ export function DiffViewer({
   isReviewing,
   token,
   onClose,
+  onMinimize,
   onStartReview,
   onStopReview,
   onResolve,
@@ -580,9 +583,20 @@ export function DiffViewer({
               </button>
             )}
 
+            {onMinimize && (
+              <button
+                onClick={onMinimize}
+                title="Run in background (minimize modal)"
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#333333] hover:border-white text-[#858585] hover:text-white transition-colors cursor-pointer"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+            )}
+
             <button
               onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#333333] hover:border-white text-[#858585] hover:text-white transition-colors cursor-pointer"
+              title={isStreaming || isReviewing ? "Stop review and close" : "Close"}
+              className="h-8 w-8 flex items-center justify-center rounded-lg border border-[#333333] hover:border-[#f85149] text-[#858585] hover:text-[#ff7b72] transition-colors cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>

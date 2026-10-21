@@ -27,7 +27,7 @@ import {
 } from '@/lib/review-api';
 import { LivingCyberCanvas } from '@/components/dashboard/LivingCyberCanvas';
 import { LuxuryPreloader } from '@/components/ui/LuxuryPreloader';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Maximize2, Square, X, CheckCircle2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, token, isLoading: authLoading } = useAuth();
@@ -42,6 +42,7 @@ export default function DashboardPage() {
 
   // Diff Modal State
   const [inspectingPr, setInspectingPr] = useState<PullRequest | null>(null);
+  const [minimizedPr, setMinimizedPr] = useState<PullRequest | null>(null);
   const [diffFiles, setDiffFiles] = useState<FileDiff[]>([]);
   const [loadingDiff, setLoadingDiff] = useState<boolean>(false);
 
@@ -60,6 +61,35 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => stopPolling, [stopPolling]);
+
+  // Lightweight background sync when a review is running minimized
+  useEffect(() => {
+    if (!minimizedPr || !isReviewing || !reviewId || !token) return;
+
+    let mounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const { review, comments } = await fetchReview(token, reviewId);
+        if (!mounted) return;
+        if (comments && comments.length > 0) {
+          setReviewComments(comments);
+        }
+        if (review) {
+          setCurrentReview(review);
+          if (review.status === 'done' || review.status === 'error') {
+            setIsReviewing(false);
+          }
+        }
+      } catch {
+        // Quiet poll error
+      }
+    }, 2500);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [minimizedPr, isReviewing, reviewId, token]);
 
   // Route protection
   useEffect(() => {
@@ -114,7 +144,16 @@ export default function DashboardPage() {
   // Open diff modal and check for existing review
   const handleInspectDiff = async (pr: PullRequest) => {
     if (!token || !selectedRepo) return;
+
+    // If opening the currently minimized background review, restore it smoothly!
+    if (minimizedPr && minimizedPr.number === pr.number) {
+      setInspectingPr(minimizedPr);
+      setMinimizedPr(null);
+      return;
+    }
+
     stopPolling();
+    setMinimizedPr(null);
     setInspectingPr(pr);
     setLoadingDiff(true);
     setCurrentReview(undefined);
@@ -175,6 +214,7 @@ export default function DashboardPage() {
     } finally {
       stopPolling();
       setIsReviewing(false);
+      setMinimizedPr(null);
     }
   };
 
@@ -340,13 +380,26 @@ export default function DashboardPage() {
           reviewComments={reviewComments}
           isReviewing={isReviewing}
           token={token}
-          onClose={() => {
+          onClose={async () => {
+            // Stop review process on backend if actively running
+            if (isReviewing && reviewId && token) {
+              try {
+                await stopReview(token, reviewId);
+              } catch (err) {
+                console.warn('Failed to stop review on close:', err);
+              }
+            }
             stopPolling();
             setIsReviewing(false);
             setInspectingPr(null);
+            setMinimizedPr(null);
             setCurrentReview(undefined);
             setReviewComments([]);
             setReviewId(null);
+          }}
+          onMinimize={() => {
+            setMinimizedPr(inspectingPr);
+            setInspectingPr(null);
           }}
           onStartReview={handleStartReview}
           onStopReview={handleStopReview}
@@ -359,6 +412,74 @@ export default function DashboardPage() {
           onReviewComplete={handleReviewComplete}
           onReviewError={handleReviewError}
         />
+      )}
+
+      {/* Background Review Floating Status Widget */}
+      {minimizedPr && (
+        <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex items-center gap-3.5 px-4 py-3 rounded-xl border border-emerald-500/40 bg-[#0d0d0d]/95 backdrop-blur-md shadow-2xl shadow-black text-white max-w-sm sm:max-w-md animate-in slide-in-from-bottom-5">
+          <div className="relative flex h-3 w-3 shrink-0">
+            {isReviewing ? (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+              </>
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 -ml-0.5 -mt-0.5" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-xs text-white truncate">
+                PR #{minimizedPr.number}
+              </span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                  isReviewing
+                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30'
+                    : 'text-[#4ec9b0] bg-emerald-950/40 border-emerald-500/20'
+                }`}
+              >
+                {isReviewing ? 'ANALYZING IN BACKGROUND' : 'AUDIT COMPLETE'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#a1a1aa] truncate font-mono">
+              {minimizedPr.title}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-[#262626]">
+            <button
+              onClick={() => {
+                setInspectingPr(minimizedPr);
+                setMinimizedPr(null);
+              }}
+              className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+              title="Open Diff & Findings"
+            >
+              <Maximize2 className="h-3 w-3" />
+              <span className="text-[11px]">Open</span>
+            </button>
+
+            {isReviewing ? (
+              <button
+                onClick={handleStopReview}
+                className="h-7 w-7 rounded-lg border border-[#f85149]/40 bg-[#372326] text-[#ff7b72] hover:bg-[#48282c] flex items-center justify-center transition-all cursor-pointer"
+                title="Stop review on backend"
+              >
+                <Square className="h-3 w-3 fill-current" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setMinimizedPr(null)}
+                className="h-7 w-7 rounded-lg hover:bg-[#252526] text-[#858585] hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

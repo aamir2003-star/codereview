@@ -513,6 +513,7 @@ export const reviewController = {
                   }
 
                   const comments = await geminiService.reviewFileDiff(file.filename, file.patch, contextFiles);
+                  if (activeReviewAborts.get(reviewId)) break;
 
                   // Phase 4: Run dedicated security scanner on sensitive files
                   if (isSecuritySensitive(file.filename)) {
@@ -553,6 +554,8 @@ export const reviewController = {
                     }
                   }
 
+                  if (activeReviewAborts.get(reviewId)) break;
+
                   if (comments.length > 0) {
                     // Deduplicate comments: only remove identical duplicates on the exact same line
                     const uniqueComments: typeof comments = [];
@@ -565,6 +568,8 @@ export const reviewController = {
                       );
                       if (!isDup) uniqueComments.push(c);
                     }
+
+                    if (activeReviewAborts.get(reviewId)) break;
 
                     const docs = await Comment.insertMany(
                       uniqueComments.map((c) => ({
@@ -638,6 +643,19 @@ export const reviewController = {
         }
 
         await Promise.all(workers);
+
+        if (activeReviewAborts.get(reviewId)) {
+          console.log(`[Review] Review #${reviewId} halted cleanly due to user cancellation.`);
+          await Review.updateOne(
+            { _id: review._id },
+            { $set: { status: 'done', updatedAt: new Date() } }
+          );
+          io?.to(`review:${reviewId}`).emit('review:stopped', {
+            reviewId,
+            message: 'Review stopped by user',
+          });
+          return;
+        }
 
         // Phase 2.5: Retry pass for any files that failed due to transient rate limits
         if (failedFiles.length > 0 && !activeReviewAborts.get(reviewId)) {
@@ -866,6 +884,11 @@ export const reviewController = {
           }
         }
 
+        if (activeReviewAborts.get(reviewId)) {
+          console.log(`[Review] Review #${reviewId} was aborted by user. Skipping final completion emission.`);
+          return;
+        }
+
         // Review completed
         const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
         console.log(`[Review] Completed review #${reviewId} in ${durationSec}s with ${totalComments} total comments.`);
@@ -950,6 +973,10 @@ export const reviewController = {
       await review.save();
 
       const io = getIO();
+      io?.to(`review:${reviewId}`).emit('review:stopped', {
+        reviewId,
+        message: 'Review stopped by user',
+      });
       io?.to(`review:${reviewId}`).emit('review:complete', {
         reviewId,
         totalComments: review.totalComments || 0,
