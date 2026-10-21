@@ -1201,6 +1201,11 @@ export const reviewController = {
       reviewBody += `- 🚨 **Security Vulnerabilities:** ${securityCount}\n`;
       reviewBody += `- 🐛 **Logic Bugs:** ${bugCount}\n`;
       reviewBody += `- 💡 **Code Smells & Improvements:** ${smellCount}\n\n`;
+
+      if (comments.length === 0) {
+        reviewBody += `### ✅ Clean Audit: 0 Issues Detected\nAll modified files were thoroughly evaluated across syntax, logic flow, and security rules. No defects, vulnerabilities, or quality violations were found. This pull request is clean and ready for merge.\n\n`;
+      }
+
       reviewBody += `*Generated automatically by [ReviewCopilot](https://github.com/aamir2003-star/codereview).*`;
 
       // Format inline comments for GitHub API

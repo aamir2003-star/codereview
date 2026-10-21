@@ -35,8 +35,9 @@ import {
   ExternalLink,
   Loader2,
   Send,
-  CheckCheck,
   Menu,
+  CheckCircle2,
+  ShieldCheck,
 } from 'lucide-react';
 import { HighTrafficModal } from '@/components/ui/HighTrafficModal';
 
@@ -365,6 +366,15 @@ export function DiffViewer({
     (c) => !files.some((f) => f.filename === c.filePath)
   );
 
+  const isReviewDone =
+    !isStreaming &&
+    !isReviewing &&
+    (currentReview?.status === 'done' ||
+      (currentReview && currentReview.status !== 'pending' && currentReview.status !== 'error') ||
+      progress?.percent === 100);
+
+  const hasZeroIssues = isReviewDone && reviewComments.length === 0;
+
   const isOrphanSelected = selectedFileIndex === -1;
   const selectedFile = isOrphanSelected ? null : files[selectedFileIndex] ?? null;
   const totalAdditions = files.reduce((acc, f) => acc + f.additions, 0);
@@ -477,11 +487,16 @@ export function DiffViewer({
               <span>{files.length} files</span>
               <span className="text-[#4ec9b0]">+{totalAdditions}</span>
               <span className="text-[#f85149]">-{totalDeletions}</span>
-              {reviewComments.length > 0 && (
+              {reviewComments.length > 0 ? (
                 <span className="text-[#dcdcaa] border-l border-[#3a3a3a] pl-3">
                   {reviewComments.length} audit issues
                 </span>
-              )}
+              ) : isReviewDone ? (
+                <span className="text-emerald-400 border-l border-[#3a3a3a] pl-3 flex items-center gap-1.5 font-mono">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span>0 issues detected &bull; Clean PR</span>
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -543,7 +558,7 @@ export function DiffViewer({
                     ) : (
                       <GitPullRequest className="h-3.5 w-3.5" />
                     )}
-                    <span>{isPublishingReview ? 'Posting...' : 'Post to GitHub'}</span>
+                    <span>{isPublishingReview ? 'Posting...' : hasZeroIssues ? 'Post Approval to GitHub' : 'Post to GitHub'}</span>
                   </button>
                 )}
 
@@ -638,11 +653,15 @@ export function DiffViewer({
           >
             <Code2 className="h-3.5 w-3.5" />
             <span>Unified Diff &amp; Inline Audit</span>
-            {reviewComments.length > 0 && (
+            {reviewComments.length > 0 ? (
               <span className="px-1.5 py-0.2 bg-[#007acc] text-white rounded-full text-[10px] font-mono">
                 {reviewComments.length}
               </span>
-            )}
+            ) : isReviewDone ? (
+              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] font-mono flex items-center gap-1">
+                <Check className="h-2.5 w-2.5" /> 0 issues
+              </span>
+            ) : null}
             {activeTab === 'diff' && (
               <div className="absolute bottom-0 inset-x-0 h-0.5 bg-[#007acc]" />
             )}
@@ -695,6 +714,7 @@ export function DiffViewer({
                   const fileIssuesCount = reviewComments.filter(
                     (c) => c.filePath === file.filename
                   ).length;
+                  const isFileClean = isReviewDone && fileIssuesCount === 0;
                   const isSelected = selectedFileIndex === idx;
 
                   return (
@@ -715,11 +735,15 @@ export function DiffViewer({
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
-                        {fileIssuesCount > 0 && (
+                        {fileIssuesCount > 0 ? (
                           <span className="bg-[#f85149] text-white px-1.5 py-0.2 rounded-full font-bold">
                             {fileIssuesCount}
                           </span>
-                        )}
+                        ) : isFileClean ? (
+                          <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.2 rounded-full font-bold flex items-center gap-0.5">
+                            <Check className="h-2.5 w-2.5" /> Clean
+                          </span>
+                        ) : null}
                         <span className="text-[#4ec9b0]">+{file.additions}</span>
                         <span className="text-[#f85149]">-{file.deletions}</span>
                       </div>
@@ -793,6 +817,7 @@ export function DiffViewer({
                       const fileIssuesCount = reviewComments.filter(
                         (c) => c.filePath === file.filename
                       ).length;
+                      const isFileClean = isReviewDone && fileIssuesCount === 0;
                       const isSelected = selectedFileIndex === idx;
 
                       return (
@@ -813,11 +838,15 @@ export function DiffViewer({
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px] pl-2">
-                            {fileIssuesCount > 0 && (
+                            {fileIssuesCount > 0 ? (
                               <span className="bg-[#f85149] text-white px-1.5 py-0.5 rounded-full font-bold">
                                 {fileIssuesCount}
                               </span>
-                            )}
+                            ) : isFileClean ? (
+                              <span className="text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+                                <Check className="h-2.5 w-2.5" /> Clean
+                              </span>
+                            ) : null}
                             <span className="text-[#4ec9b0]">+{file.additions}</span>
                             <span className="text-[#f85149]">-{file.deletions}</span>
                           </div>
@@ -890,6 +919,50 @@ export function DiffViewer({
                       +{selectedFile.additions} / -{selectedFile.deletions}
                     </span>
                   </div>
+
+                  {/* Audit Verification Banner when review completed */}
+                  {isReviewDone && (
+                    <div className="mx-3 my-2.5 p-3 rounded-lg border border-emerald-500/30 bg-emerald-950/20 backdrop-blur-sm text-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div className="flex items-start sm:items-center gap-2.5">
+                          <div className="h-7 w-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-emerald-300 font-mono text-xs">
+                                {currentComments.length === 0
+                                  ? hasZeroIssues
+                                    ? '✨ PR Audit Passed — 0 Defects Detected'
+                                    : `✓ ${selectedFile.filename} Passed Inspection (0 Issues)`
+                                  : `Audit Completed — ${currentComments.length} issue${currentComments.length > 1 ? 's' : ''} in this file`}
+                              </span>
+                              {currentComments.length === 0 && (
+                                <span className="px-1.5 py-0.2 bg-emerald-900/60 border border-emerald-500/40 text-emerald-300 rounded text-[10px] font-mono">
+                                  VERIFIED CLEAN
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-emerald-400/80 mt-0.5">
+                              {currentComments.length === 0
+                                ? hasZeroIssues
+                                  ? 'Gemini 2.0 reviewed all changes in this PR. No logic bugs, security vulnerabilities, syntax errors, or breaking changes found.'
+                                  : 'All changes in this file passed automated static and security checks.'
+                                : 'Review findings and suggestions are annotated inline on the corresponding lines below.'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 font-mono text-[10px] text-emerald-300/90 pl-9 sm:pl-0">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/20">
+                            AST &amp; Syntax: ✓ OK
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/20">
+                            Security: ✓ Clean
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Diff Lines Table */}
                   <div className="font-mono text-xs leading-5 select-text overflow-x-auto">

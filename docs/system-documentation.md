@@ -198,13 +198,22 @@ All endpoints require JWT Bearer authentication header unless marked otherwise:
 The Socket.io server attaches to the Express HTTP listener on port 5001.
 
 ### 4.1 Connection & Handshake Authentication
-Client initiates connection:
+Client initiates connection using direct WebSocket transport (`transports: ['websocket']`) to avoid long-polling timeout pitfalls:
 ```typescript
 io('http://localhost:5001', {
-  auth: { token: localStorage.getItem('token') }
+  withCredentials: true,
+  transports: ['websocket'],
+  reconnectionAttempts: 15,
+  reconnectionDelay: 1000,
+  timeout: 10000,
 });
 ```
-Sockets lacking a valid JWT are rejected immediately during the handshake middleware.
+Authentication middleware validates candidate tokens in strict priority order:
+1. **HttpOnly Cookie** (`auth_token`): Primary browser session token sent automatically with credentials.
+2. **Socket Auth Payload** (`handshake.auth.token`): Used if non-cookie client connects.
+3. **Authorization Header** (`Bearer <JWT>`): Fallback header authentication.
+
+Sockets lacking a valid JWT in all candidate sources are rejected immediately during the handshake middleware.
 
 ### 4.2 Room Isolation
 Every pull request review executes in an isolated socket room: `review:${reviewId}`.
@@ -292,6 +301,12 @@ Built with Next.js 16 App Router, React 19, Tailwind CSS v4, and Framer Motion 1
 
 ### 6.1 Component Structure
 - **`DiffViewer.tsx`**: Renders side-by-side and unified file diffs. Injects inline comment cards below flagged lines with severity tags and suggested code fixes.
+  - **Clean PR & 0-Defect Verification**: Automatically displays affirmative verification badges and a dedicated "AST & Syntax Passed / OWASP Security Clean" banner when review concludes with 0 findings.
+  - **Responsive Mobile Drawer**: Sidebar collapses into a touch-friendly slide-out drawer on `<md` screens with a backdrop overlay.
+  - **Auto-Scroll to Findings**: Smoothly scrolls to the line containing the first audit finding upon selecting a file.
+  - **Horizontal Scroll Non-Clipping**: Uses `.no-scrollbar` with `whitespace-nowrap` to display full file paths without truncation.
+- **`PrList.tsx` & `RepoList.tsx`**:
+  - Implements a mobile master-detail flow on viewports `< 768px`. Selecting a repository reveals pull requests with a back navigation arrow returning to the repository selector.
 - **`PrArchitectureViewer.tsx`**:
   - Displays executive summary, real-world metaphor, and ASCII sequence flow.
   - Interactive file walkthrough with instant search filter.
@@ -309,6 +324,9 @@ Built with Next.js 16 App Router, React 19, Tailwind CSS v4, and Framer Motion 1
 1. **Streaming Responsiveness**: Real-time Socket.io streaming provides immediate feedback rather than blocking the user for minutes.
 2. **Fault Tolerance**: Multi-model fallback, retry queues, and exponential backoff prevent job abortion.
 3. **High Defect Detection Accuracy**: Pre-fetching static context files enables the AI to cross-reference routes, schemas, and controllers across files.
+4. **Token Encryption at Rest**: GitHub personal access tokens are encrypted using AES-256-GCM with unique IVs and HMAC auth tags prior to persisting in MongoDB.
+5. **Clean Verification**: No ambiguous empty states when PRs have 0 defects; developers receive affirmative validation and one-click GitHub approval sync.
+6. **Mobile First-Class Usability**: Responsive master-detail flow, drawers, and smooth scrolling for tablet and mobile devices.
 
 ### Critical Limitations & Improvement Roadmap
 1. **In-Memory Job Execution**:
@@ -320,10 +338,7 @@ Built with Next.js 16 App Router, React 19, Tailwind CSS v4, and Framer Motion 1
 3. **Google Free-Tier Quota Constraints**:
    - *Issue*: Models like `gemini-3.8-flash` have a 20 request/day limit on Google AI Studio Free Tier.
    - *Remediation*: Enable Google Cloud pay-as-you-go billing for enterprise workloads.
-4. **Token Encryption at Rest**:
-   - *Issue*: GitHub personal access tokens are stored unencrypted in MongoDB.
-   - *Remediation*: Add AES-256-GCM field-level encryption before persisting to MongoDB.
-5. **Large Diff DOM Virtualization**:
+4. **Large Diff DOM Virtualization**:
    - *Issue*: Files with >5,000 diff lines render all DOM nodes, causing scroll lag.
    - *Remediation*: Implement `@tanstack/react-virtual` or integrate Monaco Editor's diff widget.
 

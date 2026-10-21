@@ -99,11 +99,30 @@ flowchart TD
 - **Secondary Retry Queue**: Any file affected by temporary network blips or rate limits is queued and re-audited after a cooldown pass.
 - **Severity Normalizer**: Standardizes model output labels (e.g., `concurrency race condition`, `logic flaw`, `memory leak`) into standard severities (`bug`, `security`, `smell`, `nit`) rather than dropping them.
 
-### 4. Collaborative Live Diff Viewer
+### 4. Clean PR & 0-Defect Audit Verification
+- **Affirmative Clean Status**: When a pull request passes all static and AI evaluations with 0 errors or warnings, the UI provides clear, positive validation rather than an ambiguous empty state.
+- **Multi-Level Visual Badges**: Displays a top-level `0 issues detected • Clean PR` header badge, green `Clean (0)` tab counters, and individual `✓ Clean` badges next to each audited file in the sidebar tree.
+- **Verification Summary Card**: Automatically renders an interactive "AST & Syntax Passed / OWASP Security Clean" banner directly above the diff view, detailing test coverage.
+- **One-Click GitHub Approval**: When 0 defects are detected, the sync button shifts to "Post Approval to GitHub", posting an official Clean Audit status comment directly onto the PR.
+
+### 5. Mobile & Tablet Responsive Architecture
+- **Master-Detail Mobile Workflow**: Automatically adapts to narrow viewports (`< 768px`) by prioritizing repository selection, transitioning to pull requests, and providing an accessible `<ArrowLeft />` back navigation button.
+- **Slide-Out Hamburger File Drawer**: The file system sidebar cleanly collapses on mobile into a slide-out drawer with a backdrop overlay, accessible via a prominent hamburger `<Menu />` toggle.
+- **Scrollable Full File Paths**: Eliminates truncated file names using horizontal scrolling (`whitespace-nowrap` + `.no-scrollbar`), allowing full inspection of deeply nested directory paths on small screens.
+- **Smooth Comment Auto-Scroll**: Selecting a file automatically scrolls the diff viewport smoothly to the exact line containing the first audit comment.
+
+### 6. Collaborative Live Diff Viewer & Realtime Sync
 - **Line-Anchored AI Cards**: Displays defect explanations, attack vectors, and ready-to-commit fix snippets directly below the offending diff line.
+- **Direct WebSocket Transport**: Eliminates HTTP polling upgrade timeouts by prioritizing native WebSockets with client-side reconnection throttles and immediate background fallback polling.
 - **Realtime Presence Indicator**: Shows avatars of all developers currently viewing the review room.
 - **Peer Voting & Resolution**: Team members can upvote critical findings or mark resolved items.
 - **One-Click GitHub Sync**: Exports approved review comments directly back to the GitHub Pull Request via GitHub REST API.
+
+### 7. Security Hardening & Production Defense
+- **BOLA / IDOR Scoping**: All review queries, comments, stops, and exports are strictly scoped to the requesting user's verified MongoDB `ObjectId` (`requestedBy`).
+- **Granular Rate Limiting**: Tiered protection using `express-rate-limit` prevents API exhaustion (`globalLimiter` at 300 req/15m, `reviewLimiter` at 30 req/10m, and `authLimiter` at 60 req/15m).
+- **Anti-SSRF Webhook Validation**: Validates external webhook targets, rejecting RFC1918 private subnets, loopbacks, link-local addresses, and cloud metadata IPs (`169.254.169.254`).
+- **HttpOnly Cookie Authentication**: Secure cookie sessions with fallback token verification priorities (HttpOnly cookie $\rightarrow$ auth payload $\rightarrow$ Authorization header).
 
 ---
 

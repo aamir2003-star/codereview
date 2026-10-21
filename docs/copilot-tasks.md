@@ -62,8 +62,33 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] Rate limiting on `POST /review`
 - [x] README with setup instructions, screenshots/GIF of the live streaming in action
 
-## Stretch Goals (only after everything above is solid)
-- [ ] Post comments back to GitHub as real PR review comments
+## Milestone 8 — Mobile & Tablet Responsive Architecture
+- [x] Master-detail responsive navigation on mobile screens (`< 768px`) with back arrow navigation
+- [x] Collapsible slide-out drawer for file navigation with backdrop overlay
+- [x] Horizontally scrollable full file paths without truncation (`.no-scrollbar`)
+- [x] Auto-scrolling to the first relevant review comment upon file selection
+
+## Milestone 9 — Security Hardening & Vulnerability Remediation
+- [x] Broken Object Level Authorization (BOLA/IDOR) protection: all reviews, comments, and reports scoped by `requestedBy: req.user.userId`
+- [x] Tiered rate limiting (`globalLimiter` at 300/15m, `reviewLimiter` at 30/10m, `authLimiter` at 60/15m)
+- [x] Server-Side Request Forgery (SSRF) guardrails on webhook dispatch blocking private, loopback, and cloud metadata IPs
+- [x] Production CORS origin whitelisting in Express server
+- [x] HttpOnly `auth_token` cookie management with multi-candidate verification
+
+## Milestone 10 — Clean PR & 0-Defect Audit Verification
+- [x] Affirmative clean audit status indicators across Top Header, Tab Badge, and Sidebar file tree
+- [x] Visual "AST & Syntax Passed / OWASP Security Clean" verification banner in diff viewer
+- [x] "Post Approval to GitHub" one-click action to sync clean audit status to GitHub PRs
+- [x] Clean audit summary section included in GitHub review markdown
+
+## Milestone 11 — Socket.io Reliability & Direct WebSocket Transport
+- [x] Direct WebSocket transport (`transports: ['websocket']`) to eliminate HTTP polling upgrade timeouts
+- [x] Server-side ping and connection timeouts (`pingTimeout: 30000`, `pingInterval: 15000`)
+- [x] Instant first-pass polling sync (`pollSync()`) to eliminate initial render latency
+- [x] Reconnection error throttling to prevent console pollution
+
+## Stretch Goals
+- [x] Post comments back to GitHub as real PR review comments (`/review/:id/publish-github`)
 - [ ] Per-comment "ask AI to explain" follow-up chat
 - [ ] Repo-wide review history/trends view
 
