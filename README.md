@@ -13,7 +13,7 @@
 | **Frontend Layer** | **38 files / 5,127 lines** | Next.js 16 (App Router), React 19, Tailwind CSS v4, Framer Motion 13 |
 | **Documentation** | **7 files / ~2,200 lines** | Architecture diagrams, PRDs, system specifications |
 | **REST Endpoints** | **14 endpoints** | Auth (3), Repos (3), Reviews (5), Comments (3), Export (2), Health (1) |
-| **Realtime Socket Events** | **7 event channels** | Bi-directional streaming for progress, presence, and new comments |
+| **Realtime Socket Events** | **9 event channels** | Bi-directional streaming for progress, presence, comments, stop signals, and architecture |
 | **Database Collections** | **3 Mongoose models** | `User`, `Review`, `Comment` |
 | **Audit Rule Coverage** | **26 defect patterns** | Concurrency races, type mismatches, prototype collisions, ReDoS, memory leaks |
 | **AI Model Chain** | **4-tier fallback** | `gemini-3.5-flash-lite` → `gemini-3.8-flash` → `gemini-3.6-flash` → `gemini-3.5-flash` |
@@ -99,11 +99,13 @@ flowchart TD
 - **Secondary Retry Queue**: Any file affected by temporary network blips or rate limits is queued and re-audited after a cooldown pass.
 - **Severity Normalizer**: Standardizes model output labels (e.g., `concurrency race condition`, `logic flaw`, `memory leak`) into standard severities (`bug`, `security`, `smell`, `nit`) rather than dropping them.
 
-### 4. Clean PR & 0-Defect Audit Verification
-- **Affirmative Clean Status**: When a pull request passes all static and AI evaluations with 0 errors or warnings, the UI provides clear, positive validation rather than an ambiguous empty state.
-- **Multi-Level Visual Badges**: Displays a top-level `0 issues detected • Clean PR` header badge, green `Clean (0)` tab counters, and individual `✓ Clean` badges next to each audited file in the sidebar tree.
-- **Verification Summary Card**: Automatically renders an interactive "AST & Syntax Passed / OWASP Security Clean" banner directly above the diff view, detailing test coverage.
-- **One-Click GitHub Approval**: When 0 defects are detected, the sync button shifts to "Post Approval to GitHub", posting an official Clean Audit status comment directly onto the PR.
+### 4. Real-Time Process Cancellation & Background Mode
+- **Instant Stop**: The `X` close button and the floating widget's Stop button both call `POST /api/reviews/:id/stop` before unmounting, sending a real abort signal to the backend — not just a frontend close.
+- **Backend Abort Guard Points**: The review worker checks `activeReviewAborts.set(reviewId, true)` at 4 checkpoints inside its loop: after each Gemini call, before saving to MongoDB, before the retry pass, and before emitting the final completion event. This prevents zombie workers from broadcasting phantom progress after a stop.
+- **`review:stopped` Socket Event**: Emitted by the backend when the worker exits cleanly. The frontend `handleStopped` handler transitions the UI to a stopped state without waiting for `review:complete`.
+- **Minimize to Background (`–` button)**: Sends the active review to the background without stopping it. The DiffViewer unmounts while all state (reviewId, comments) remains in the parent.
+- **Floating Background Widget**: Appears bottom-right when a review is minimized. Shows PR number, title, pulsing dot while running, status pill ("ANALYZING IN BACKGROUND" / "AUDIT COMPLETE"), animated progress bar (no numbers), "Open" and "Stop" buttons.
+- **Background Sync Polling**: While minimized, `dashboard/page.tsx` polls `GET /api/reviews/:id` every 2.5 seconds to keep the widget accurate even when the socket connection goes idle.
 
 ### 5. Mobile & Tablet Responsive Architecture
 - **Master-Detail Mobile Workflow**: Automatically adapts to narrow viewports (`< 768px`) by prioritizing repository selection, transitioning to pull requests, and providing an accessible `<ArrowLeft />` back navigation button.
@@ -194,6 +196,7 @@ Connecting to namespace `/` with `auth: { token: "<JWT>" }`:
 | `comment:new` | Server $\rightarrow$ Client | `{ reviewId, comment }` | Streams newly detected line-by-line comment |
 | `presence:update` | Server $\rightarrow$ Client | `{ reviewId, users }` | Emits active viewer avatars in room |
 | `file:error` | Server $\rightarrow$ Client | `{ reviewId, filename, error }` | Notifies file analysis failure |
+| `review:stopped` | Server $\rightarrow$ Client | `{ reviewId, message? }` | Emitted when review is cancelled via Stop button or API. Frontend transitions to stopped state. |
 
 ---
 

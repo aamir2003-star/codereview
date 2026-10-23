@@ -2,7 +2,7 @@
 
 > **AI-Powered Code Review Copilot**  
 > Comprehensive System Blueprint, Data Models, API Contracts, and Operational Runbook.  
-> Document Version: 2.1 (Production Verified)
+> Document Version: 3.0 (Production Verified — Full Feature Set)
 
 ---
 
@@ -241,6 +241,7 @@ Every pull request review executes in an isolated socket room: `review:${reviewI
 6. **`comment:new`** (`server -> client`): Emitted immediately when a new defect is discovered and saved to MongoDB.
 7. **`presence:update`** (`server -> client`): Broadcasts list of active peer avatars in the review room.
 8. **`file:error`** (`server -> client`): Notifies client if an individual file encounters analysis failure.
+9. **`review:stopped`** (`server -> client`): Emitted when a review is cancelled via `POST /api/reviews/:id/stop` or when the `X` close button sends an abort to the backend. Payload: `{ reviewId: string, message?: string }`. The frontend `handleStopped` handler in `useReviewSocket.ts` sets `isStreaming = false`, updates progress stage text to "Review stopped", and triggers `onReviewComplete`.
 
 ---
 
@@ -301,12 +302,16 @@ Built with Next.js 16 App Router, React 19, Tailwind CSS v4, and Framer Motion 1
 
 ### 6.1 Component Structure
 - **`DiffViewer.tsx`**: Renders side-by-side and unified file diffs. Injects inline comment cards below flagged lines with severity tags and suggested code fixes.
-  - **Clean PR & 0-Defect Verification**: Automatically displays affirmative verification badges and a dedicated "AST & Syntax Passed / OWASP Security Clean" banner when review concludes with 0 findings.
+  - **Minimize to Background (`–` button)**: A minimize button in the header sends the review to the background without stopping it. The modal unmounts and a floating widget appears in the bottom-right corner showing the PR number, title, status pill ("ANALYZING IN BACKGROUND" / "AUDIT COMPLETE"), and an animated pulsing dot while running.
+  - **Floating Background Widget**: Persists on screen while a review runs in the background. A thin animated progress bar below the PR title shows completion progress (left-to-right, no numbers). The widget has an "Open" button to restore the modal and a "Stop" button to cancel the review.
+  - **Real-Time Stop / Cancel**: Both the `X` (close) button and the floating widget's Stop button call `POST /api/reviews/:id/stop` before unmounting. This sets `activeReviewAborts.set(reviewId, true)` on the backend, which causes the review worker to exit cleanly at its next checkpoint. The server emits `review:stopped` and the frontend transitions to a stopped state without waiting for `review:complete`.
+  - **Abort Guard Points**: The backend checks the abort flag at four points: after each Gemini call returns, before saving comments to MongoDB, before the secondary retry pass, and before emitting the final 100% completion event.
   - **Responsive Mobile Drawer**: Sidebar collapses into a touch-friendly slide-out drawer on `<md` screens with a backdrop overlay.
   - **Auto-Scroll to Findings**: Smoothly scrolls to the line containing the first audit finding upon selecting a file.
   - **Horizontal Scroll Non-Clipping**: Uses `.no-scrollbar` with `whitespace-nowrap` to display full file paths without truncation.
 - **`PrList.tsx` & `RepoList.tsx`**:
   - Implements a mobile master-detail flow on viewports `< 768px`. Selecting a repository reveals pull requests with a back navigation arrow returning to the repository selector.
+  - On mobile, initial page load/refresh always renders the repository list (not the PR list), preventing incorrect deep-link state.
 - **`PrArchitectureViewer.tsx`**:
   - Displays executive summary, real-world metaphor, and ASCII sequence flow.
   - Interactive file walkthrough with instant search filter.
@@ -315,6 +320,25 @@ Built with Next.js 16 App Router, React 19, Tailwind CSS v4, and Framer Motion 1
 - **`PresenceIndicator.tsx`**: Renders peer avatars currently connected to the review room.
 - **`VsCodeSyntaxHighlighter.tsx`**: Tokenizes diff snippets with VSCode-style syntax highlighting.
 - **`HighTrafficModal.tsx`**: Graceful modal triggered when AI API traffic limits are exceeded.
+
+### 6.2 Background Review State Machine
+```
+User clicks "–"   →  minimizedPr = inspectingPr, inspectingPr = null
+                       ↓  DiffViewer unmounts (state preserved in parent)
+                       ↓  Floating widget renders with polling every 2.5s
+User clicks "Open" →  inspectingPr = minimizedPr, minimizedPr = null
+                       ↓  DiffViewer remounts with existing reviewId/comments
+User clicks "Stop" →  POST /api/reviews/:id/stop
+(widget or X btn)      ↓  Backend sets activeReviewAborts flag
+                       ↓  Worker exits, emits review:stopped
+                       ↓  Frontend handleStopped fires, isStreaming = false
+                       ↓  minimizedPr cleared
+```
+
+### 6.3 Background Sync Polling
+While a review runs minimized, the parent `dashboard/page.tsx` polls `GET /api/reviews/:id` every 2.5 seconds (only when `minimizedPr && isReviewing && reviewId`). This ensures the floating widget's progress bar and status pill stay accurate even when the Socket.io connection is idle.
+
+
 
 ---
 
@@ -325,8 +349,10 @@ Built with Next.js 16 App Router, React 19, Tailwind CSS v4, and Framer Motion 1
 2. **Fault Tolerance**: Multi-model fallback, retry queues, and exponential backoff prevent job abortion.
 3. **High Defect Detection Accuracy**: Pre-fetching static context files enables the AI to cross-reference routes, schemas, and controllers across files.
 4. **Token Encryption at Rest**: GitHub personal access tokens are encrypted using AES-256-GCM with unique IVs and HMAC auth tags prior to persisting in MongoDB.
-5. **Clean Verification**: No ambiguous empty states when PRs have 0 defects; developers receive affirmative validation and one-click GitHub approval sync.
-6. **Mobile First-Class Usability**: Responsive master-detail flow, drawers, and smooth scrolling for tablet and mobile devices.
+5. **Mobile First-Class Usability**: Responsive master-detail flow, drawers, and smooth scrolling for tablet and mobile devices.
+6. **Real-Time Process Cancellation**: Users can stop an in-flight AI review at any moment — either via the `–` close button or the floating widget's Stop button — with guaranteed backend abort guard points preventing zombie workers from continuing in the background.
+7. **Background Review Minimization**: Reviews can run in the background while the user navigates the dashboard. The floating widget with an animated progress bar and pulsing status dot keeps the user informed without blocking the UI.
+8. **Direct WebSocket Transport**: Configured with `transports: ['websocket']` to skip HTTP long-polling upgrade handshakes, eliminating the connection timeout errors that plagued the initial polling-based implementation.
 
 ### Critical Limitations & Improvement Roadmap
 1. **In-Memory Job Execution**:

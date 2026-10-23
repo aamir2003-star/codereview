@@ -87,10 +87,27 @@ Checklist form, grouped by milestone (matches the PRD's build order). Check item
 - [x] Instant first-pass polling sync (`pollSync()`) to eliminate initial render latency
 - [x] Reconnection error throttling to prevent console pollution
 
+## Milestone 12 — Real-Time Process Cancellation
+- [x] Backend `activeReviewAborts` Map checked at 4 guard points inside the worker loop (post-Gemini call, pre-DB insert, pre-retry pass, pre-completion emit)
+- [x] `POST /api/reviews/:id/stop` sets abort flag and emits `review:stopped` socket event
+- [x] `X` close button in DiffViewer header calls `stopReview()` before unmounting (not just frontend close)
+- [x] `review:stopped` socket event handler (`handleStopped`) in `useReviewSocket.ts` transitions UI to stopped state
+- [x] Prevented phantom 100% completion events from reaching the frontend after stop
+
+## Milestone 13 — Background Review Minimize Mode
+- [x] `–` minimize button in DiffViewer header minimizes panel without stopping the review
+- [x] Floating bottom-right widget appears with PR number, title, pulsing dot indicator, and status pill
+- [x] Animated progress bar (left-to-right, no numbers) below PR title in floating widget
+- [x] Background sync polling every 2.5s via `GET /api/reviews/:id` while minimized
+- [x] "Open" button on widget restores the modal with all existing review state preserved
+- [x] "Stop" button on widget calls `stopReview()` and dismisses the widget
+- [x] Mobile initial page load fix: refreshing dashboard on small screens always shows repo list, not PR list
+
 ## Stretch Goals
 - [x] Post comments back to GitHub as real PR review comments (`/review/:id/publish-github`)
 - [ ] Per-comment "ask AI to explain" follow-up chat
 - [ ] Repo-wide review history/trends view
+- [ ] Background review conflict modal (show warning if user starts a new review while one is running in background)
 
 ## Definition of Done (per milestone)
 A milestone isn't done until: it works end-to-end manually, there are no secrets committed, and the relevant section of `architecture.md`/`rules.md` still accurately describes what you built (update the docs if you deviated).
